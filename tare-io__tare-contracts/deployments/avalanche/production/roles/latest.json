@@ -1,0 +1,19 @@
+{
+  "adminSafe": "0x9013CD0bA21b1f706d62c9ca3E3f1cEBF995722B",
+  "version": "0.5.22",
+  "proposerSafe": "0x25310e597D3cC792508f571c8B914ef7573Ce8E5",
+  "guardianSafe": "0x25310e597D3cC792508f571c8B914ef7573Ce8E5",
+  "whitelisterSafe": "0x32e907D1B55027899fBfEe4B5d4E11C5A05Ac6a3",
+  "hotProxy": "0xA823C709823875b61dd7E048a5B68f8783129aC0",
+  "operationalManagementSafe": "0x092dc8A5a3caC21d3d3Db29453bfE8Ce8d744789",
+  "offramp": "0xC303B7B1F8AddD472Cd8987543340829eeA05e43",
+  "salt": "avalanche-production:setup-grants:v2",
+  "originatorSa": "0x04E9a9C0d6592738b2D67cF2fB65048F8b764250",
+  "borrowerSa": "0x6E278D354303Ed2E0F166a38fDf837cbd353b42b",
+  "investorSa": "0xb904c084bB4615d578C723DaA449A4c3d674A6a2",
+  "servicerSa": "0x38F52F1ed6c8f0a4a2BaA2a989CAd9C3da0c1AbB",
+  "shareholderSa": "0xad3d5bB7046E462192Aa35A8052f37bFD9794377",
+  "portfolioManagerSa": "0xB8fC02aF0d6a3f6f4fe4Faaa53e9d2A9Ba6dEb66",
+  "investorManagerSa": "0xE219172b582fF389601D41b08643016E0184d927",
+  "calculatingAgentSa": "0x936b6D99764Ce0259bA9cEF20A698d6AC8FbCD7a"
+}

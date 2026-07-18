@@ -1,0 +1,42 @@
+[profile.default]
+src = "contracts"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.33"
+evm_version = "cancun"
+via_ir = true
+optimizer = true
+optimizer_runs = 20
+fs_permissions = [{ access = "read", path = "./deploymentConfig.toml"}, { access = "read", path = "./deploymentConfig.anvil.toml"}, { access = "read", path = "./dist/"}, { access = "read-write", path = "./deployments/"}]
+
+
+[profile.base_sepolia]
+src = "contracts"
+out = "out"
+libs = ["lib"]
+via_ir = true
+fs_permissions = [{ access = "read-write", path = "./deployments/base_sepolia/*"}]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[rpc_endpoints]
+84532 = "${BASE_SEPOLIA_RPC}"
+8453 = "${BASE_RPC}"
+43113 = "${FUJI_RPC}"
+43114 = "${AVALANCHE_RPC}"
+31337 = "${ANVIL_RPC}"
+# sepolia = "${SEPOLIA_RPC}"
+
+[etherscan]
+43114 = { key = "${ETHERSCAN_API_KEY}", chain = 43114 }
+# 84532 = { key = "${ETHERSCAN_API_KEY}" }
+# 8453 = { key = "${ETHERSCAN_API_KEY}" }
+# 43113 = { key = "${ETHERSCAN_API_KEY}" }
+# sepolia = { key = "${ETHERSCAN_API_KEY}" }
+
+[fmt]
+tab_width=2
+line_length=100
+
+[lint]
+exclude_lints = ["unsafe-typecast", "asm-keccak256", "unwrapped-modifier-logic"]

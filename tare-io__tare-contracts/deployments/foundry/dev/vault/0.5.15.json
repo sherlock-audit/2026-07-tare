@@ -1,0 +1,15 @@
+{
+  "version": "0.5.15",
+  "commitHash": "af94c6a",
+  "component": "vault",
+  "deploymentName": "dev",
+  "chain": "foundry",
+  "chainId": 31337,
+  "blockNumber": 0,
+  "timestamp": 1777305742,
+  "contracts": {
+    "NavCalculator": "0xf04B27BdaC79A2C340224FaA4Fa84852F7be0a44",
+    "VaultShareToken": "0x0adBa1CD0967A4A906aF0F20610A82e1aD1cBff3",
+    "PortfolioVault": "0x48A2Eb28dDFc3B3CB8d13F6F4C3E3e1c8F0c4753"
+  }
+}

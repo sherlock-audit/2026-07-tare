@@ -1,0 +1,15 @@
+[submodule "tare-io__tare-contracts/lib/solmate"]
+	path = tare-io__tare-contracts/lib/solmate
+	url = https://github.com/transmissions11/solmate
+[submodule "tare-io__tare-contracts/lib/forge-std"]
+	path = tare-io__tare-contracts/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "tare-io__tare-contracts/lib/createx-forge"]
+	path = tare-io__tare-contracts/lib/createx-forge
+	url = https://github.com/radeksvarz/createx-forge
+[submodule "tare-io__tare-contracts/lib/safe-smart-account"]
+	path = tare-io__tare-contracts/lib/safe-smart-account
+	url = https://github.com/safe-global/safe-smart-account
+[submodule "tare-io__tare-contracts/lib/openzeppelin-contracts"]
+	path = tare-io__tare-contracts/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts

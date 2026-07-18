@@ -1,0 +1,16 @@
+{
+  "version": "0.5.16",
+  "commitHash": "54cf6b2",
+  "component": "loans",
+  "deploymentName": "dev",
+  "chain": "baseSepolia",
+  "chainId": 84532,
+  "blockNumber": 40800313,
+  "timestamp": 1777368914,
+  "contracts": {
+    "Loans": "0x0e32b42B037063A00A05432DC5351Ce86d63C8c9",
+    "LoansNFT": "0x3c6d10703078CaC701680E4107543a43489A9A27",
+    "LoansExchange": "0xdB18c1dd26A296cC0b7Df8Dbb12E9E546Ac4EBde",
+    "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+  }
+}
