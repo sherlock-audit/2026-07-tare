@@ -26,6 +26,8 @@ ___
 - Calculating Agent is trusted to value the portfolio correctly.
 - Borrower: initially this will be a smart account that we control but in the future it could be an untrusted counterparty
 - The Investor is identified by loan-NFT ownership which can potentially be untrusted
+- Borrower, Investor and Servicer are trusted within their individual loan. However, if they can hurt other loans/users, this can be considered valid issue (if qualifies for Medium or Higher severity definitions).
+
 
 **Limitations on values set by roles**
 
@@ -47,6 +49,8 @@ ___
 
 ### Q: Is the codebase expected to comply with any specific EIPs?
 See specs.
+
+Issues breaking EIPs can be considered valid only if they lead to Medium or higher impact and qualify for Medium or higher severity definitions
 ___
 
 ### Q: Are there any off-chain mechanisms involved in the protocol (e.g., keeper bots, arbitrage bots, etc.)? We assume these mechanisms will not misbehave, delay, or go offline unless otherwise specified.
@@ -79,11 +83,12 @@ There are no independent keeper bots, arbitrage bots, liquidation bots,… At th
 - Contracts validate permissions, ledger/accounting constraints, token custody, cash segregation, and configured invariants; they do not recompute consumer-loan business math.
 - Ordinary loan servicing does not rely on an external oracle. Vault NAV is computed onchain from loan state plus discount and portfolio factors configured by the `CALCULATING_AGENT`; the NAV value is refreshed by a vault manager (`PORTFOLIO_MANAGER`/`INVESTOR_MANAGER`) calling `updateNav`(this must be done especially before any approving any deposit/redemption) and there is no automated NAV schedule today.
 - Borrowers usually interact in fiat.
-- Event monitors, offchain records, and UIs mirror onchain state for operations and reporting, but are not trusted by the contracts.
 ___
 
 ### Q: What properties/invariants do you want to hold even if breaking them has a low/unknown impact?
 See specs/invariants.md in the repo.
+
+Issues breaking Invariants can be considered valid only if they lead to Medium or higher impact and qualify for Medium or higher severity definitions
 ___
 
 ### Q: Please discuss any design choices you made.
