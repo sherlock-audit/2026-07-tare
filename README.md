@@ -24,7 +24,6 @@ ___
 - Portfolio Manager is trusted.
 - Investor Manager is trusted.
 - Calculating Agent is trusted to value the portfolio correctly.
-- Borrower: initially this will be a smart account that we control but in the future it could be an untrusted counterparty
 - The Investor is identified by loan-NFT ownership which can potentially be untrusted
 - Borrower, Investor and Servicer are trusted within their individual loan. However, if they can hurt other loans/users, this can be considered valid issue (if qualifies for Medium or Higher severity definitions).
 
