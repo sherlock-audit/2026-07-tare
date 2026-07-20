@@ -1,0 +1,23 @@
+{
+  "blockNumber": 9,
+  "chain": "foundry",
+  "chainId": 31337,
+  "commitHash": "b425b44",
+  "component": "accounts",
+  "contracts": {
+    "HotSafe": "0x4F856c0633Ec12F940719805B9C7F5F52b406ef2",
+    "Loans": "0x5df7e0Fbec7679A90A4FDd0ACDa4c714202080c8",
+    "LoansExchange": "0x439971d8932d671246dFc6a714712De7c246e3c7",
+    "LoansNFT": "0xF99949793a55B9B757397eE125183a02C92C58B4",
+    "MultiSendCallOnly": "0x9b659fd2E78545Fb3A86b046946CCCce87c4a7Cc",
+    "SafeProxyFactory": "0xf7dA7d5916f172dB0C3073dE49487f485a43fAb4",
+    "SafeSingleton": "0x347cbE1cA56d52b1882842D4319e18654d3E76Ad",
+    "SmartAccountFactory": "0xe66125013F2Cfc4Eae07623411b7247e33BC69da",
+    "TrustedCalls": "0x546AE7eb0D750424Ed83F4a7148d4d0Ce2b0C092",
+    "TrustedSpender": "0x2d4678eBbd988eEbF46d33DBac81F30EB0Cb1617",
+    "USDC": "0xEc7247B01257ee44d3998E2b9E5D7120cf38A79b"
+  },
+  "deploymentName": "dev",
+  "timestamp": 1783530460,
+  "version": "0.5.21"
+}

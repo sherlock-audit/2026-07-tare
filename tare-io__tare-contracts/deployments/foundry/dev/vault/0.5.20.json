@@ -1,0 +1,26 @@
+{
+  "blockNumber": 8,
+  "chain": "foundry",
+  "chainId": 31337,
+  "commitHash": "8dac69f",
+  "component": "vault",
+  "contracts": {
+    "HotSafe": "0x4F856c0633Ec12F940719805B9C7F5F52b406ef2",
+    "Loans": "0xc7044f38032aC5C54b1f9A4dEFf95d7270714E13",
+    "LoansExchange": "0xdaB2D2660597417956b1FF31C4428346E39e4E8D",
+    "LoansNFT": "0x495D9974E93Bf400e77C7B821972A0398e89b90E",
+    "MultiSendCallOnly": "0x9b659fd2E78545Fb3A86b046946CCCce87c4a7Cc",
+    "NavCalculator": "0x257Dc7EE5FBf66E6D7c9a2fDc7F486Fd0BDF932b",
+    "PortfolioVault": "0x3F5a9c8eEF37cAb5c1Dd129fFf4424c8298e9994",
+    "SafeProxyFactory": "0xf7dA7d5916f172dB0C3073dE49487f485a43fAb4",
+    "SafeSingleton": "0x347cbE1cA56d52b1882842D4319e18654d3E76Ad",
+    "SmartAccountFactory": "0x1f86a6c9e56fF9da15e9DbA82478Cf62Cc1Fa68a",
+    "TrustedCalls": "0x343BeB8254D07cd7CDbEE76997b57E8767bA6055",
+    "TrustedSpender": "0x98A97C12670CEC1bF4f45302d4E5199154217E99",
+    "USDC": "0xEc7247B01257ee44d3998E2b9E5D7120cf38A79b",
+    "VaultShareToken": "0xeC0AF11A9D771BB5C85E292cC02FCDeCa07816F3"
+  },
+  "deploymentName": "dev",
+  "timestamp": 1783517628,
+  "version": "0.5.20"
+}

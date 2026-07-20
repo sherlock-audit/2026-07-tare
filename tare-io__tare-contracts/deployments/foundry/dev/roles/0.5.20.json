@@ -1,0 +1,19 @@
+{
+  "operationalManagementSafe": "0x162b590b502B9aDe2b197D92FB31705C9EA706d8",
+  "version": "0.5.20",
+  "adminSafe": "0x11EBf8924461778eb686F7b63ab82ed9Fc5EAd8B",
+  "proposerSafe": "0x06Be754c8E1163e104497502b7868CA3076bEcb1",
+  "guardianSafe": "0x06Be754c8E1163e104497502b7868CA3076bEcb1",
+  "whitelisterSafe": "0x8F09DFb794D5bB756b09C1E02E475FEbb3c74d77",
+  "hotProxy": "0x4F856c0633Ec12F940719805B9C7F5F52b406ef2",
+  "offramp": "0x4F856c0633Ec12F940719805B9C7F5F52b406ef2",
+  "salt": "foundry-dev:setup-grants:v1",
+  "originatorSa": "0x7BaA3301d62511cA1C0f8B9166BdCfB2a131b720",
+  "borrowerSa": "0x70208FF2D95a8A90425799b115db89cF2F477f5d",
+  "investorSa": "0x005d1D8F46f8b0c6e7d2c8D963a7ccc403307641",
+  "servicerSa": "0x80aC66E1AFB0A7D90F9333fC0De14Cbcb7d01D0B",
+  "shareholderSa": "0x17110A9CbfA7AD7F2E636Ce91e7f1F4D3e98e4c2",
+  "portfolioManagerSa": "0xD200e0dB931FdA773De0764AB34E0aD91684f746",
+  "investorManagerSa": "0xa63E8F1688D89401929e8FB9B0833c254D9Fa8a6",
+  "calculatingAgentSa": "0xbb7040F93f0C5883F4791Cd9b6f8847e7019eB44"
+}

@@ -1,0 +1,13 @@
+{
+  "blockNumber": 90461079,
+  "chain": "avalanche",
+  "chainId": 43114,
+  "commitHash": "253a84a",
+  "component": "timelock",
+  "contracts": {
+    "TimelockController": "0x79a51C2C6DB0D4d7C685ad41A6B5b628C1e6bba0"
+  },
+  "deploymentName": "production",
+  "timestamp": 1784210404,
+  "version": "0.5.22"
+}

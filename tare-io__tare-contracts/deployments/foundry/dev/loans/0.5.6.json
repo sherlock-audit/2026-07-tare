@@ -1,0 +1,17 @@
+{
+  "version": "0.5.6",
+  "commitHash": "4987bd8",
+  "component": "loans",
+  "deploymentName": "dev",
+  "chain": "foundry",
+  "chainId": 31337,
+  "blockNumber": 0,
+  "timestamp": 1773922672,
+  "contracts": {
+    "HotSafe": "0xc41A804F88c93dF0a3FeFD2a42Ed94bD1b1d2678",
+    "originatorSmartAccount": "0x8F6e9ad75071C1E952F0Ae1fA1a04DBef6cADa08",
+    "Loans": "0xd556Ee6cE6Ae029c1371E19CA78e685bd39c6d08",
+    "LoansNFT": "0xE7f12d5a2F6D255E21edfA3CfC7fd9bc195DF951",
+    "USDC": "0xEc7247B01257ee44d3998E2b9E5D7120cf38A79b"
+  }
+}

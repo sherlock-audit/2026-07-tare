@@ -1,0 +1,18 @@
+{
+  "version": "0.5.4",
+  "commitHash": "3edbec7",
+  "component": "accounts",
+  "deploymentName": "dev",
+  "chain": "foundry",
+  "chainId": 31337,
+  "blockNumber": 0,
+  "timestamp": 1773922672,
+  "contracts": {
+    "SafeSingleton": "0x347cbE1cA56d52b1882842D4319e18654d3E76Ad",
+    "SafeProxyFactory": "0xf7dA7d5916f172dB0C3073dE49487f485a43fAb4",
+    "MultiSendCallOnly": "0x9b659fd2E78545Fb3A86b046946CCCce87c4a7Cc",
+    "SmartAccountFactory": "0x27bb19ba30C9EBC49F6c297a2f4Eb0BAF9301647",
+    "TrustedSpender": "0x30D68CB78D55e36bB9A3982A13E9B935De3EfD67",
+    "TrustedCalls": "0xd361C463379E1412c8461BBe2101BfAE420840Ef"
+  }
+}

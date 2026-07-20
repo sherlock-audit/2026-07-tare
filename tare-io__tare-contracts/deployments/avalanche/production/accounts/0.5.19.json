@@ -1,0 +1,18 @@
+{
+  "blockNumber": 88172998,
+  "chain": "avalanche",
+  "chainId": 43114,
+  "commitHash": "7e88914",
+  "component": "accounts",
+  "contracts": {
+    "MultiSendCallOnly": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+    "SafeProxyFactory": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+    "SafeSingleton": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+    "SmartAccountFactory": "0x7cB205E30282Ce68c586e744C5097d7d50f32C9E",
+    "TrustedCalls": "0xf5871831E38D46e30F303FE945f5e5f781403e74",
+    "TrustedSpender": "0xe9c02cfCF7d14AF855914C318b0EAb553F763e54"
+  },
+  "deploymentName": "production",
+  "timestamp": 1781633163,
+  "version": "0.5.19"
+}

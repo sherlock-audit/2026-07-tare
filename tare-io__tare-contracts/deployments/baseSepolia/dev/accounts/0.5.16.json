@@ -1,0 +1,18 @@
+{
+  "version": "0.5.16",
+  "commitHash": "54cf6b2",
+  "component": "accounts",
+  "deploymentName": "dev",
+  "chain": "baseSepolia",
+  "chainId": 84532,
+  "blockNumber": 40800404,
+  "timestamp": 1777369096,
+  "contracts": {
+    "SafeSingleton": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+    "SafeProxyFactory": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+    "MultiSendCallOnly": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+    "SmartAccountFactory": "0xb9170BE770FE53A7C3920655Ed2dD5ce8A871c5c",
+    "TrustedSpender": "0xEB1d558Af4Fa48c0a89be91E9e5e3582D38C6bAC",
+    "TrustedCalls": "0xC8D5DE42edab5c8713C084AD8f83755bEC5a30Fe"
+  }
+}

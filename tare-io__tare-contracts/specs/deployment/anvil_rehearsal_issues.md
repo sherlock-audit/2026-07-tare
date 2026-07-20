@@ -1,0 +1,43 @@
+# Anvil Rehearsal — Issues Log
+
+Tracking issues encountered while running the production deployment on Anvil per
+[anvil_rehearsal_runbook.md](anvil_rehearsal_runbook.md) and
+[production_deployment_runbook.md](production_deployment_runbook.md), plus the
+fixes needed.
+
+## Status
+
+- Started: 2026-06-16
+- Current step: §2.1 — Fork Avalanche (starting Anvil)
+
+## Issues
+
+| #   | Runbook step | Symptom | Root cause | Fix | Status |
+| --- | ------------ | ------- | ---------- | --- | ------ |
+| 1   | §2.1 Fork Avalanche | `anvil` fails: `a value is required for '--fork-url <URL>' but none was supplied` | `$AVALANCHE_RPC` is unset — §2.1 uses it as the upstream mainnet RPC to fork from, then overwrites it to the local anvil URL on the next line, but never tells you to export the real RPC first | Export the real RPC before forking: `export AVALANCHE_RPC=https://api.avax.network/ext/bc/C/rpc`, then run the `anvil` command, then re-export to `http://127.0.0.1:8545`. Runbook §2.1 should add this prerequisite step. | Open |
+| 2   | §2.4 Stand-in Safes | Runbook only has a comment `# Deploy three more single-owner Safes (e.g. via cast send to SafeProxyFactory.createProxyWithNonce)` with no actual command | Step was left as a placeholder; no CLI command existed to deploy a plain (non-role) Safe | Added a new `deploy-safe` CLI subcommand ([cli/commands/deploy-safe.ts](../../cli/commands/deploy-safe.ts)) that resolves the `SafeProxyFactory` + `SafeSingleton`, encodes `setup(...)` for a single-owner threshold-1 Safe, calls `createProxyWithNonce`, and parses the new address from the `ProxyCreation` event. Runbook §2.4 now calls `pnpm tare-contracts deploy-safe --owners $DEPLOYER_ADDR --threshold 1 --json`. | Fixed (CLI + runbook) |
+| 3   | §2.4 Stand-in Safes | `export ADMIN_SAFE=0x...` — but no `ADMIN_SAFE` appears in any `latest.json` after `deploy local` | `deploy local` (`foundry-dev` config) sets `admin` to the deployer EOA (anvil account #0), **not** a Safe; only `HotSafe` is deployed as a real Safe. The runbook's claim that `deploy local` "creates Admin + Hot-Proxy Safe" is wrong. Separately, `deploy-safe` read the factory/singleton from the `accounts` manifest, which does not exist yet at §2.4. | (a) `deploy-safe` now resolves the factory/singleton from the **chain config** (canonical Safe infra, live on the fork) with a manifest fallback for local chains. (b) §2.4 rewritten to deploy all five stand-in Safes (incl. `ADMIN_SAFE`) uniformly via `deploy-safe`, dropping the `deploy local` reliance. | Fixed (CLI + runbook) |
+| 4   | §2.4 Stand-in Safes | `jq: parse error: Invalid numeric literal at line 2, column 2` when piping `deploy-safe ... --json` to `jq` | Two causes: (a) the `pnpm` lifecycle banner (`> @tare-io/...`) prints to **stdout**, polluting the JSON stream; (b) the `avalanche-production` deployment config was **commented out** in `deployment-configs.ts`, so every `--chain avalanche --name production` command failed with `Unknown deployment` — the error JSON was the only other stdout line. The runbook (production §1.2) claims the skeleton "contains" this config. | (a) Runbook commands now use `pnpm -s` (silent) to suppress the banner. (b) Uncommented the `avalanche-production` config in [cli/lib/deployment-configs.ts](../../cli/lib/deployment-configs.ts) (admin/guardian remain zero placeholders, filled in §3). Verified: `deploy-safe` now returns a clean address and deploys a threshold-1 Safe owned by the deployer EOA. | Fixed (config + runbook) |
+| 5   | §4 Deploy protocol | `deploy accounts` fails: `vm.readFile: failed to open .../vault/latest.json: No such file or directory` | Deploy order is wrong. `accounts` (`DeploySmartAccounts.s.sol:58`) reads `vault/latest.json` for the `PortfolioVault` address, so accounts **depends on** vault. The runbook §4 deployed in the order loans → accounts → vault, so vault didn't exist when accounts ran. `vault` only depends on loans (`DeployVault.s.sol:63`). | Reordered production runbook §4 to **loans → vault → accounts** and documented the dependency. | Fixed in runbook |
+| 6   | §2, §4, §7 (ergonomics) | Runbook told you to `export LOANS=0x... TRUSTED_CALLS=0x... SAF=0x... ...` by hand-copying from the artifacts, despite every address already being in `deployments/.../latest.json`. `SAF` was also a cryptic name. | Manual transcription is error-prone and redundant; the deploy artifacts are the source of truth. | Replaced the hand-copied `export ...=0x...` blocks (§2 Timelock, §4 protocol, §7.6/§7.7 vault) with `jq` reads from the artifacts, e.g. `export LOANS=$(jq -r '.contracts.Loans' $DEPLOY_DIR/loans/latest.json)`. Renamed `SAF` → `SMART_ACCOUNT_FACTORY`. Anvil §4.1 updated too. Manual `=0x...` left only where the value is genuinely external (the §1.4 Safe addresses created in the Safe UI, the §5 Brale `OFFRAMP`). | Fixed in runbooks |
+| 7   | §5 Create smart accounts | `create-smart-account ... --json \| jq` fails with `jq: parse error: Invalid numeric literal` followed by a Node `EPIPE` crash | Same root cause as #4: the `pnpm` lifecycle banner (`> @tare-io/...`) prints to stdout and breaks the JSON stream. `jq` dies on the banner line, closing the pipe; the still-writing CLI then gets `EPIPE` from `outputResult`. **Rule: any `pnpm tare-contracts ... --json` whose stdout is parsed must use `pnpm -s`.** | Added `pnpm -s` to the §5 `create-smart-account` loop. Audited both runbooks — the only two output-parsed CLI calls are §2.4 (`deploy-safe`) and §5 (`create-smart-account`), both now silenced; the remaining `pnpm tare-contracts` calls run for side effects and don't need it. | Fixed in runbook |
+| 8   | §6 Configure smart accounts | `setup-smart-accounts` fails: `Error: Contract LoansNFT not found in avalanche/production/vault` | CLI bug in [cli/commands/setup-smart-accounts.ts](../../cli/commands/setup-smart-accounts.ts): `loansNft` and `loansExchange` were read from the `vault` component, but `LoansNFT`/`LoansExchange` live in the `loans` manifest (vault only has `NavCalculator`/`PortfolioVault`/`VaultShareToken`). Every other CLI command (`generate-deployments`, `verify-deployment`) reads them from `loans` correctly — the bug was isolated to this file. | Changed both reads to component `"loans"`. Typecheck clean. | Fixed in CLI |
+| 9   | §6 Configure smart accounts | `setup-smart-accounts` human-readable output prints `steps: [object Object]` and `verification: [object Object]` | `outputResult` ([cli/lib/output.ts](../../cli/lib/output.ts)) only handled primitive values in non-JSON mode — it did `console.log(\`${key}: ${value}\`)`, which stringifies nested objects/arrays as `[object Object]`. `setup-smart-accounts` puts `steps` (grouped per-category) and `verification` (per-SA) objects in `data`. | Made `outputResult` render non-primitive values as indented pretty-printed JSON under the key (generic fix, benefits every command). Typecheck clean. | Fixed in CLI |
+| 10  | §10.1 Verify deployment | `verify-deployment` fails: `error: unknown option '--timelock-proposers'` (also `--timelock-cancellers`, `--timelock-executors`) | Those flags were never implemented — `verify-deployment` only defines `--timelock-min-delay`. `verifyTimelock` checks only `minDelay` + `DEFAULT_ADMIN_ROLE` self-admin; it does **not** verify the proposer/canceller/executor sets, because `TimelockController` is not `AccessControlEnumerable` (no on-chain role enumeration — confirmed by `DeployTimelock.s.sol:54`). The runbook §10.1 listed the non-existent flags and overclaimed that the sets are re-verified here. | Corrected runbook §10.1: dropped the three non-existent flags and rewrote the bullet to state the exact-set proposer/canceller/executor invariant is asserted at deploy time by `DeployTimelock.s.sol` (§2), not by `verify-deployment`. | Fixed in runbook |
+## Backlog / enhancement ideas
+
+- **`outputResult` — label owner/role addresses.** In the human-readable
+  `setup-smart-accounts` output (and similar commands), print the known
+  label/name next to each address (e.g. `0x7417…6bf5 (operationalManagementSafe)`,
+  `0xd05b…c0a6 (hotProxy)`, the eight role SAs, etc.) so the `steps` /
+  `verification` blocks are readable without cross-referencing the manifest.
+  Build the address→label map from the setup manifest + `smartAccounts` and
+  annotate addresses when rendering.
+- **`verify-deployment` — report current vault NAV.** Add the
+  `PortfolioVault.lastNav()` value to the `verify-deployment` output (informational,
+  not a pass/fail gate) so the §7.7 NAV bootstrap can be confirmed in the same
+  hard-gate run rather than via a separate `cast call $PORTFOLIO_VAULT "lastNav()(uint256)"`.
+
+## Notes
+
+_(running log of observations, commands run, and decisions)_

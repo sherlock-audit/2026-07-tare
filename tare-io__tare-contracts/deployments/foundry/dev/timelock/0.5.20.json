@@ -1,0 +1,13 @@
+{
+  "blockNumber": 6,
+  "chain": "foundry",
+  "chainId": 31337,
+  "commitHash": "8dac69f",
+  "component": "timelock",
+  "contracts": {
+    "TimelockController": "0x4f0F5742fBbf06B88641B7E441EaAa61a914D1Bd"
+  },
+  "deploymentName": "dev",
+  "timestamp": 1783517626,
+  "version": "0.5.20"
+}
