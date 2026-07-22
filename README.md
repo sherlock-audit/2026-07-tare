@@ -114,7 +114,7 @@ This is a non-exhaustive list but we are interested in findings that relate to:
 
 # Audit scope
 
-[tare-io__tare-contracts @ c0b2ab9f1b66bb7bfa4b76d2674f7676784fedd6](https://github.com/sherlock-scoping/tare-io__tare-contracts/tree/c0b2ab9f1b66bb7bfa4b76d2674f7676784fedd6)
+[tare-io__tare-contracts @ b215321b218aac7e7fc0072d97c74e93f23bdaf7](https://github.com/sherlock-scoping/tare-io__tare-contracts/tree/b215321b218aac7e7fc0072d97c74e93f23bdaf7)
 - [tare-io__tare-contracts/contracts/interfaces/Accounts.sol](tare-io__tare-contracts/contracts/interfaces/Accounts.sol)
 - [tare-io__tare-contracts/contracts/interfaces/IERC1404.sol](tare-io__tare-contracts/contracts/interfaces/IERC1404.sol)
 - [tare-io__tare-contracts/contracts/interfaces/ILoansExchange.sol](tare-io__tare-contracts/contracts/interfaces/ILoansExchange.sol)
