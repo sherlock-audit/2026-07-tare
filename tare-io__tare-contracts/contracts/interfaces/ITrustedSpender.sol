@@ -170,8 +170,8 @@ interface ITrustedSpender {
 
   /**
    * @notice Transfer `tokenId` of `collection` from `from` to `to`.
-   * @dev Caller must be an authorized delegate of `from`. Uses `safeTransferFrom`, so recipient
-   *      contracts must implement `IERC721Receiver`.
+   * @dev Caller must be an authorized delegate of `from`. Uses `transferFrom`, so the
+   *      recipient is not checked for `IERC721Receiver` support.
    * @param collection ERC721 collection address.
    * @param from Safe account to transfer from.
    * @param to Recipient address.

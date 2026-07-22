@@ -6,6 +6,7 @@ import {TrustedSpender} from "../contracts/TrustedSpender.sol";
 import {ITrustedSpender} from "../contracts/interfaces/ITrustedSpender.sol";
 import {MockUSDC} from "../test/mocks/USDC.sol";
 import {MockERC721} from "../test/mocks/MockERC721.sol";
+import {NonReceiverAccount} from "../test/mocks/NonReceiverAccount.sol";
 import {RescueTokensTestBase} from "./helpers/RescueTokensTestBase.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -744,7 +745,6 @@ contract TrustedSpenderTest is Test, RescueTokensTestBase {
     vm.prank(safeAccount);
     spender.addDelegate(safeAccount, delegate1);
 
-    // Use an EOA recipient so safeTransferFrom does not need a receiver impl.
     vm.prank(safeAccount);
     spender.setNFTAllowance(address(nft), safeAccount, recipient, true, NO_EXPIRY);
 
@@ -752,6 +752,22 @@ contract TrustedSpenderTest is Test, RescueTokensTestBase {
     spender.executeNFTTransfer(address(nft), safeAccount, recipient, tokenId);
 
     assertEq(nft.ownerOf(tokenId), recipient);
+  }
+
+  /// A Safe account does not implement `onERC721Received`; `transferFrom` must still deliver.
+  function test_ExecuteNFTTransfer_ToNonReceiverContract() public {
+    uint256 tokenId = _setUpNft();
+    address nonReceiver = address(new NonReceiverAccount());
+
+    vm.prank(safeAccount);
+    spender.addDelegate(safeAccount, delegate1);
+    vm.prank(safeAccount);
+    spender.setNFTAllowance(address(nft), safeAccount, nonReceiver, true, NO_EXPIRY);
+
+    vm.prank(delegate1);
+    spender.executeNFTTransfer(address(nft), safeAccount, nonReceiver, tokenId);
+
+    assertEq(nft.ownerOf(tokenId), nonReceiver);
   }
 
   function test_ExecuteNFTTransfer_AnyTokenId_BlanketAllowance() public {

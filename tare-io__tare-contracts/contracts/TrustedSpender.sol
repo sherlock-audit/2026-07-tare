@@ -136,7 +136,7 @@ contract TrustedSpender is ITrustedSpender, Rescuable {
     require(allowance.allowed, NFTTransferNotAllowed());
     require(block.timestamp <= allowance.validUntil, AllowanceExpired());
 
-    IERC721(collection).safeTransferFrom(from, to, tokenId);
+    IERC721(collection).transferFrom(from, to, tokenId);
     emit NFTTransferExecuted(collection, from, to, tokenId, msg.sender);
   }
 

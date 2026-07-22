@@ -30,6 +30,10 @@ export const ROLES_MANIFEST_ADDRESS_FIELDS = [
   "portfolioManagerSa",
   "investorManagerSa",
   "calculatingAgentSa",
+  // Local-only: a second investor SA baked into the anvil state so downstream e2e suites can
+  // own a portfolio no other test writes into. Not part of the production role set —
+  // create-role-accounts, setup-smart-accounts and grant-roles all ignore it.
+  "fixtureInvestorSa",
 ] as const
 
 export const ROLES_MANIFEST_STRING_FIELDS = ["salt"] as const

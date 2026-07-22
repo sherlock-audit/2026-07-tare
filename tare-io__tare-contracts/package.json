@@ -1,6 +1,6 @@
 {
   "name": "@tare-io/tare-contracts",
-  "version": "0.5.23",
+  "version": "0.5.26",
   "description": "Smart contracts, ABIs, and TypeScript bindings for Tare protocol",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

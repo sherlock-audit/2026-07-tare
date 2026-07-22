@@ -140,11 +140,14 @@ async function main(): Promise<void> {
     // The deploy just wrote these manifests; read addresses from them directly.
     const loans = loadDeploymentManifest(ROOT, "foundry", "dev", "loans")
     const timelockManifest = loadDeploymentManifest(ROOT, "foundry", "dev", "timelock")
+    const accountsManifest = loadDeploymentManifest(ROOT, "foundry", "dev", "accounts")
+    const trustedSpenderAddress = accountsManifest.contracts.TrustedSpender
     const currencyAddress = loans.contracts.USDC
     const hotSafeAddress = loans.contracts.HotSafe
     const timelockAddress = timelockManifest.contracts.TimelockController
-    if (!currencyAddress || !hotSafeAddress || !timelockAddress) {
-      throw new Error("Missing USDC/HotSafe/TimelockController in deployment manifests")
+    const loansNftAddress = loans.contracts.LoansNFT
+    if (!currencyAddress || !hotSafeAddress || !timelockAddress || !loansNftAddress || !trustedSpenderAddress) {
+      throw new Error("Missing USDC/HotSafe/TimelockController/LoansNFT/TrustedSpender in deployment manifests")
     }
     console.log(`  Currency: ${currencyAddress}`)
     console.log(`  HotSafe:  ${hotSafeAddress}`)
@@ -169,6 +172,10 @@ async function main(): Promise<void> {
         hotSafeAddress,
         "--currencies",
         currencyAddress,
+        // Approves TrustedSpender as ERC-721 operator via configureSmartAccount, which the
+        // loan-NFT transfer path needs. Production role SAs only ever approve LoansExchange.
+        "--nft-collections",
+        loansNftAddress,
         "--trusted-recipients",
         hotSafeAddress,
       ])
@@ -182,7 +189,44 @@ async function main(): Promise<void> {
       cli(["grant-roles", "--include-shareholder-grant"])
     })
 
+    // Local extra (not part of the production setup): a second investor SA, wired exactly
+    // like the production one. Downstream e2e suites point a loan profile at it so analytics
+    // fixtures own a portfolio that concurrent specs never write into. It has to be baked
+    // rather than deployed at test time because `Loans.create` requires the investor to be
+    // in the originator's address book, and only the originator can write that book.
+    await step("Create fixture investor smart account (local e2e extra)", () => {
+      cli([
+        "create-smart-account",
+        "--owners",
+        `${opsMgmtSafe},${DEFAULT_ANVIL_ADDR}`,
+        "--threshold",
+        "1",
+        "--delegates",
+        hotSafeAddress,
+        "--currencies",
+        currencyAddress,
+        "--trusted-recipients",
+        hotSafeAddress,
+        "--manifest-key",
+        "fixtureInvestorSa",
+      ])
+    })
+
     const roles = readRoles()
+
+    await step("Register fixture investor in the originator address book", () => {
+      cli([
+        "address-book",
+        "register",
+        "--role",
+        "Investor",
+        "--addr",
+        roles.fixtureInvestorSa,
+        "--smart-account",
+        roles.originatorSa,
+      ])
+    })
+
     const saFields = [
       "originatorSa",
       "borrowerSa",
@@ -192,6 +236,7 @@ async function main(): Promise<void> {
       "portfolioManagerSa",
       "investorManagerSa",
       "calculatingAgentSa",
+      "fixtureInvestorSa",
     ] as const
 
     // Local extra (not part of the production setup): dev/e2e TrustedSpender
@@ -201,6 +246,25 @@ async function main(): Promise<void> {
         cli(["set-allowance", "set", "--from", roles[field], "--to", hotSafeAddress, "--smart-account", roles[field]])
       })
     }
+
+    // Local extra: lets e2e hand an originated loan to the fixture investor, so analytics
+    // fixtures own a portfolio concurrent tests never write into. Deliberately routed through
+    // TrustedSpender rather than trusting `LoansNFT.safeTransferFrom` on TrustedCalls — a
+    // trusted call is keyed on (target, selector) only, so trusting it would let any delegate
+    // send any unlocked loan NFT anywhere. This allowance is keyed on (collection, from, to):
+    // one edge, investorSa -> fixtureInvestorSa, and nothing else.
+    await step("Allow loan-NFT transfers investorSa -> fixtureInvestorSa (local e2e extra)", () => {
+      cli([
+        "set-allowance",
+        "set-nft",
+        "--from",
+        roles.investorSa,
+        "--to",
+        roles.fixtureInvestorSa,
+        "--smart-account",
+        roles.investorSa,
+      ])
+    })
 
     await step("Fund role accounts with USDC", () => {
       cli(["fund-usdc"])
@@ -236,6 +300,9 @@ async function main(): Promise<void> {
           PortfolioManager: roles.portfolioManagerSa,
           InvestorManager: roles.investorManagerSa,
           CalculatingAgent: roles.calculatingAgentSa,
+          // Local-only second investor; registered in the originator's address book so loans
+          // can be originated into it. See the create step above.
+          FixtureInvestor: roles.fixtureInvestorSa,
         },
         env: {
           HOT_PROXY_SAFE_ADDRESS: hotSafeAddress,

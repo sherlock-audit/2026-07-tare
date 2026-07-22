@@ -37,6 +37,7 @@ interface Opts {
   threshold: string
   delegates?: string
   currencies?: string
+  nftCollections?: string
   trustedRecipients?: string
   validUntil: string
   output?: string
@@ -93,6 +94,10 @@ export function registerCreateRoleAccounts(program: Command): void {
     .option("--threshold <n>", "Initial SA threshold", "1")
     .option("--delegates <addresses>", "Delegates configured at creation (local dev convenience)")
     .option("--currencies <addresses>", "Currencies approved at creation (local dev convenience)")
+    .option(
+      "--nft-collections <addresses>",
+      "ERC721 collections approved for TrustedSpender at creation (local dev convenience)"
+    )
     .option("--trusted-recipients <addresses>", "Trusted recipients configured at creation (local dev convenience)")
     .option("--valid-until <uint48>", "Validity timestamp for allowances (defaults to no expiry)", NO_EXPIRY)
     .option("--output <path>", "Manifest path (default: derived roles/latest.json)")
@@ -120,6 +125,7 @@ export function registerCreateRoleAccounts(program: Command): void {
           threshold: opts.threshold,
           delegates: opts.delegates,
           currencies: opts.currencies,
+          nftCollections: opts.nftCollections,
           trustedRecipients: opts.trustedRecipients,
           validUntil: opts.validUntil,
         })

@@ -34,6 +34,7 @@ The contract supports two parallel allowance models:
 - A single boolean `allowed` flag authorizes any tokenId of `collection` to move from `safe` to `recipient`
 - No per-tokenId allowlist and no count-based cap (matches `setApprovalForAll` semantics at the route level)
 - Validity semantics for `validUntil` are identical to ERC20 (must be strictly in the future at set time; `type(uint48).max` perpetual; otherwise enforced at transfer time)
+- `executeNFTTransfer` moves the token with `transferFrom`, not `safeTransferFrom`. Recipients here are Safe accounts, which do not implement `onERC721Received`, so a safe transfer would revert on the receiver check — `LoansExchange` moves loan NFTs between the same accounts with a plain `transferFrom` for the same reason. The receiver check adds nothing this contract needs: the recipient is not arbitrary, it is pinned in advance by the per-route allowance, which only the owning Safe or a guardian can set.
 - Revocation is done by setting `allowed = false`
 
 ## Data Structures
