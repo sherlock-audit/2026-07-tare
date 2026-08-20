@@ -248,6 +248,21 @@ contract GuardianAccessControlTest is Test {
     control.revokeRole(GUARDIAN_ROLE_, guardian);
   }
 
+  function test_GrantRole_RevertsWhenGrantingGuardianToZeroAddress() public {
+    // A zero-address guardian can never sign a transaction, so it must not be
+    // counted toward the last-guardian invariant. Reject the grant outright.
+    vm.prank(guardian);
+    vm.expectRevert(IGuardianAccessControl.InvalidGuardian.selector);
+    control.grantRole(GUARDIAN_ROLE_, address(0));
+
+    assertFalse(control.hasRole(GUARDIAN_ROLE_, address(0)));
+
+    // The genuine last guardian is still protected.
+    vm.prank(guardian);
+    vm.expectRevert(IGuardianAccessControl.LastGuardian.selector);
+    control.revokeRole(GUARDIAN_ROLE_, guardian);
+  }
+
   function test_RevokeRole_NonGuardianRoleUnaffectedByInvariant() public {
     vm.prank(guardian);
     control.revokeRole(ADMIN_ROLE_, admin);

@@ -90,13 +90,13 @@ abstract contract DeploySmartAccountsLibrary is DeploymentBase {
   function whitelistInitialTrustedCalls() internal {
     require(portfolioVaultContract != address(0), "whitelistInitialTrustedCalls: portfolioVault required");
 
-    uint256 count = 30;
+    uint256 count = 31;
     address[] memory targets = new address[](count);
     bytes4[] memory selectors = new bytes4[](count);
 
     address loansContractAddress = address(loansContract);
 
-    // Loans functions (14)
+    // Loans functions (15)
     targets[0] = loansContractAddress;
     selectors[0] = ILoans.create.selector;
 
@@ -139,45 +139,48 @@ abstract contract DeploySmartAccountsLibrary is DeploymentBase {
     targets[13] = loansContractAddress;
     selectors[13] = ILoans.returnFunds.selector;
 
+    targets[14] = loansContractAddress;
+    selectors[14] = ILoans.updateLoanTerms.selector;
+
     // LoansExchange functions (3)
-    targets[14] = loansExchangeContract;
-    selectors[14] = ILoansExchange.createOffer.selector;
     targets[15] = loansExchangeContract;
-    selectors[15] = ILoansExchange.acceptOffer.selector;
+    selectors[15] = ILoansExchange.createOffer.selector;
     targets[16] = loansExchangeContract;
-    selectors[16] = ILoansExchange.cancelOffer.selector;
+    selectors[16] = ILoansExchange.acceptOffer.selector;
+    targets[17] = loansExchangeContract;
+    selectors[17] = ILoansExchange.cancelOffer.selector;
 
     // PortfolioVault functions (13)
-    targets[17] = portfolioVaultContract;
-    selectors[17] = IPortfolioVault.updateNav.selector;
     targets[18] = portfolioVaultContract;
-    selectors[18] = IPortfolioVault.collectCashflows.selector;
+    selectors[18] = IPortfolioVault.updateNav.selector;
     targets[19] = portfolioVaultContract;
-    selectors[19] = IPortfolioVault.acceptSaleOffer.selector;
+    selectors[19] = IPortfolioVault.collectCashflows.selector;
     targets[20] = portfolioVaultContract;
-    selectors[20] = IPortfolioVault.createSaleOffer.selector;
+    selectors[20] = IPortfolioVault.acceptSaleOffer.selector;
     targets[21] = portfolioVaultContract;
-    selectors[21] = IPortfolioVault.cancelSaleOffer.selector;
+    selectors[21] = IPortfolioVault.createSaleOffer.selector;
+    targets[22] = portfolioVaultContract;
+    selectors[22] = IPortfolioVault.cancelSaleOffer.selector;
 
     // ERC-7540 async deposit/redeem. Safe to whitelist because every payout destination must hold
     // SHAREHOLDER_ROLE (asset paths check _requireInvestor(receiver); share paths are gated by the
     // share token's transfer hook), and that role is administered by WHITELISTER_ROLE, not a delegate.
-    targets[22] = portfolioVaultContract;
-    selectors[22] = IERC7540Deposit.requestDeposit.selector;
     targets[23] = portfolioVaultContract;
-    selectors[23] = IERC7540Deposit.deposit.selector;
+    selectors[23] = IERC7540Deposit.requestDeposit.selector;
     targets[24] = portfolioVaultContract;
-    selectors[24] = IPortfolioVault.approveDeposit.selector;
+    selectors[24] = IERC7540Deposit.deposit.selector;
     targets[25] = portfolioVaultContract;
-    selectors[25] = IPortfolioVault.cancelDepositRequest.selector;
+    selectors[25] = IPortfolioVault.approveDeposit.selector;
     targets[26] = portfolioVaultContract;
-    selectors[26] = IERC7540Redeem.requestRedeem.selector;
+    selectors[26] = IPortfolioVault.cancelDepositRequest.selector;
     targets[27] = portfolioVaultContract;
-    selectors[27] = IERC7575.redeem.selector;
+    selectors[27] = IERC7540Redeem.requestRedeem.selector;
     targets[28] = portfolioVaultContract;
-    selectors[28] = IPortfolioVault.approveRedemption.selector;
+    selectors[28] = IERC7575.redeem.selector;
     targets[29] = portfolioVaultContract;
-    selectors[29] = IPortfolioVault.cancelRedeemRequest.selector;
+    selectors[29] = IPortfolioVault.approveRedemption.selector;
+    targets[30] = portfolioVaultContract;
+    selectors[30] = IPortfolioVault.cancelRedeemRequest.selector;
 
     TrustedCalls(trustedCalls).addTrustedCalls(targets, selectors);
   }

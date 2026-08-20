@@ -8,8 +8,8 @@ This document describes how to bring Tare smart contracts to operational state o
 
 - **Deployed contracts:** Loans, LoansNFT, SmartAccountFactory, TrustedCalls, TrustedSpender, USDC (or currency token)
 - **Admin Safe:** A Gnosis Safe that holds `GUARDIAN_ROLE` on Loans. Owned exclusively by hardware wallet(s). The backend is registered as a **Transaction Service delegate** (off-chain role) allowing it to propose transactions that appear in Safe{Wallet} UI, but it cannot sign or execute.
-- **Hot Proxy Safe:** A threshold-1 Gnosis Safe controlled by the backend. Serves as a delegate on TrustedCalls and TrustedSpender for all Smart Accounts, and as a co-owner of each Smart Account (alongside the Admin Safe).
-- **Smart Accounts:** Four Safes deployed via SmartAccountFactory (Originator, Investor, Borrower, Servicer), each with threshold 2/2 (owners: Hot Proxy + Admin Safe).
+- **Forwarder:** The nonce-free relay controlled by the backend's authorized sender EOA. Serves as a delegate on TrustedCalls and TrustedSpender for all Smart Accounts, and as a co-owner of each Smart Account (alongside the Admin Safe).
+- **Smart Accounts:** Four Safes deployed via SmartAccountFactory (Originator, Investor, Borrower, Servicer), each with threshold 2/2 (owners: Forwarder + Admin Safe).
 - **Safe Transaction Service:** Must be available on the target chain (Avalanche C-Chain is supported). The CLI uses `@safe-global/api-kit` to propose transactions.
 
 ## What the Factory Already Does
@@ -18,7 +18,7 @@ When a Smart Account is deployed via `SmartAccountFactory.deploySmartAccount(...
 
 - Enables TrustedCalls as a Safe module on the SA
 - Approves each configured currency for TrustedSpender (unlimited ERC20 approval)
-- Adds each delegate (Hot Proxy) to both TrustedCalls and TrustedSpender
+- Adds each delegate (the Forwarder) to both TrustedCalls and TrustedSpender
 - Sets unlimited allowances on TrustedSpender for each trusted recipient (e.g., offramp address)
 
 See [smart-accounts.md](../smart-accounts.md) for full details.
@@ -38,8 +38,8 @@ npx tsx cli/index.ts production-setup \
 
 **What it does:**
 
-1. Reads `admin-safe` and `hot-proxy` addresses from the deployment config
-2. Executes Hot Proxy's `approveHash` calls on each target SA immediately (automated, Hot Proxy is an SA owner)
+1. Reads `admin-safe` and `forwarder` addresses from the deployment config
+2. Forwards `approveHash` calls to each target SA immediately (automated, the Forwarder is an SA owner)
 3. Proposes all Admin Safe transactions to the Safe Transaction Service via API Kit (as delegate)
 4. Human operator opens Safe{Wallet} UI, reviews pending transactions, signs with hardware wallet, and executes
 
@@ -76,7 +76,7 @@ Hardware Wallet(s) ──► Admin Safe ──► Target Contract
 A nested execution where the Admin Safe acts as a co-owner of a target Smart Account and instructs it to make an external call.
 
 ```
-Hot Proxy ──► targetSA.approveHash(hash)              ← automated (step 1)
+Forwarder ──► targetSA.approveHash(hash)              ← automated (step 1)
 
 Hardware Wallet(s) ──► Admin Safe ──► MultiSend:      ← human signs (step 2)
                                         ├─ targetSA.approveHash(hash)
@@ -86,7 +86,7 @@ Hardware Wallet(s) ──► Admin Safe ──► MultiSend:      ← human sign
 **Workflow:**
 
 1. CLI computes the `safeTxHash` on the target SA by calling `getTransactionHash(to, value, data, operation, ..., nonce)` — this uniquely identifies the inner call to be executed
-2. CLI executes Hot Proxy's `targetSA.approveHash(safeTxHash)` immediately (Hot Proxy is an SA owner, threshold-1 Safe)
+2. CLI forwards `targetSA.approveHash(safeTxHash)` immediately (the Forwarder is an SA owner)
 3. CLI proposes a **MultiSend** on the Admin Safe containing:
    - `targetSA.approveHash(safeTxHash)` — Admin Safe approves the hash (now both SA owners have approved)
    - `targetSA.execTransaction(innerCall)` — executes with two type-1 pre-approved signatures
@@ -108,7 +108,7 @@ npx tsx cli/index.ts production-setup \
 ```
 
 This single command:
-1. Executes Hot Proxy's `approveHash` on Investor SA and Borrower SA (automated)
+1. Forwards `approveHash` to Investor SA and Borrower SA (automated)
 2. Proposes 3 transactions on the Admin Safe via the Transaction Service
 
 **What the human operator does next:**
@@ -207,7 +207,7 @@ npx tsx cli/index.ts production-setup approve-sa-tx \
 **What it does:**
 
 1. Computes `safeTxHash` on the target SA for the given call
-2. Executes Hot Proxy's `targetSA.approveHash(hash)` immediately
+2. Forwards `targetSA.approveHash(hash)` immediately
 3. Proposes a MultiSend on the Admin Safe via the Transaction Service:
    - `targetSA.approveHash(hash)`
    - `targetSA.execTransaction(innerCall)`
@@ -242,7 +242,6 @@ npx tsx cli/index.ts verify-deployment \
   --borrower <address> \
   --investor <address> \
   --servicer <address> \
-  --hot-proxy <address>
 ```
 
 

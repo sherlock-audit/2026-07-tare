@@ -97,6 +97,7 @@ export async function deploy(opts: DeployOptions): Promise<void> {
   mkdirSync(resolve(root, `deployments/${deployment.chain}/${deployment.shortName}/accounts`), { recursive: true })
   mkdirSync(resolve(root, `deployments/${deployment.chain}/${deployment.shortName}/vault`), { recursive: true })
   mkdirSync(resolve(root, `deployments/${deployment.chain}/${deployment.shortName}/timelock`), { recursive: true })
+  mkdirSync(resolve(root, `deployments/${deployment.chain}/${deployment.shortName}/cctpBridge`), { recursive: true })
   setDeploymentEnv(opts.name)
 
   if (!process.env.PACKAGE_VERSION) {

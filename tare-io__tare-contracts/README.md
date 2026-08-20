@@ -233,6 +233,25 @@ Deployments must be configured in `cli/lib/deployment-configs.ts`. Use `--name <
 
 CI checks whether the version is already published — re-merging or replaying a build won't duplicate releases.
 
+### Preview releases
+
+To try an unmerged branch against a consumer before it lands, run the publish workflow against that
+branch:
+
+```bash
+gh workflow run release-package.yml --ref my-branch [-f label=my-preview]
+```
+
+CI derives the version from the branch's `package.json` plus the label and the run number
+(`0.5.33-my-preview.42`) — nothing is committed, so the preview version never lands on a branch. It
+creates no git tag and no GitHub release: npm is the only record of a preview.
+
+Every preview publishes under the single `preview` dist-tag, which just keeps it off `latest`; the
+tag points at whichever preview went out most recently, across all branches. Pin the exact version
+rather than `@preview` (`"@tare-io/tare-contracts": "0.5.33-my-preview.42"`) — a prerelease never
+satisfies a `^`/`~` range anyway. Re-running the workflow always produces a new version, since a
+published version can never be reused.
+
 ## License
 
 The primary license for Tare Smart Contracts V1 is the Business Source License 1.1 (`BUSL-1.1`), see [LICENSE](./LICENSE). However:

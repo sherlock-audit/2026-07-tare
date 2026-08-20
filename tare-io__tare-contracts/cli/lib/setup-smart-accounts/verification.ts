@@ -35,12 +35,12 @@ export function verifySmartAccountsSetup(ctx: SetupContext): Record<Role, SaVeri
     loansExchange,
     portfolioVault,
     vaultShareToken,
-    hotProxy,
+    forwarder,
     deployment,
   } = ctx
   const verification = {} as Record<Role, SaVerification>
 
-  const expectedOwners = [ctx.operationalManagementSafe, hotProxy, ctx.guardianSafe].map((address) =>
+  const expectedOwners = [ctx.operationalManagementSafe, forwarder, ctx.guardianSafe].map((address) =>
     address.toLowerCase()
   )
 
@@ -55,12 +55,12 @@ export function verifySmartAccountsSetup(ctx: SetupContext): Record<Role, SaVeri
       : expectedOwners.length === actualOwners.size && expectedOwners.every((address) => actualOwners.has(address))
 
     const entry: SaVerification = {
-      "TrustedCalls.isDelegate(SA, hotProxy)": isDelegate(trustedCalls, smartAccount, hotProxy, deployment),
-      "TrustedSpender.isDelegate(SA, hotProxy)": isDelegate(trustedSpender, smartAccount, hotProxy, deployment),
+      "TrustedCalls.isDelegate(SA, forwarder)": isDelegate(trustedCalls, smartAccount, forwarder, deployment),
+      "TrustedSpender.isDelegate(SA, forwarder)": isDelegate(trustedSpender, smartAccount, forwarder, deployment),
       "SA.isModuleEnabled(TrustedCalls)": isModuleEnabled(smartAccount, trustedCalls, deployment),
       "USDC.allowance(SA, TrustedSpender)": erc20Allowance(usdc, smartAccount, trustedSpender, deployment),
       owners,
-      "ownerSet == {opsMgmt, hotProxy, guardianSafe}": ownerSetCorrect,
+      "ownerSet == {opsMgmt, forwarder, guardianSafe}": ownerSetCorrect,
       threshold: getThreshold(smartAccount, deployment),
     }
 
@@ -102,7 +102,7 @@ export function verifySmartAccountsSetup(ctx: SetupContext): Record<Role, SaVeri
         portfolioVault,
         deployment
       )
-      entry["PortfolioVault.isOperator(SA, hotProxy)"] = isOperator(portfolioVault, smartAccount, hotProxy, deployment)
+      entry["PortfolioVault.isOperator(SA, forwarder)"] = isOperator(portfolioVault, smartAccount, forwarder, deployment)
     }
 
     if (role === "originator") {

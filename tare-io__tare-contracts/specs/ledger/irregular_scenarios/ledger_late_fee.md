@@ -64,9 +64,9 @@ Servicer assesses late fee:
 
 ### Ledger Entries
 
-| #   | Transaction     | Debit                        | Credit                    | Amount |
-| :-- | :-------------- | :--------------------------- | :------------------------ | :----- |
-| 7   | Assess late fee | Borrower Misc Fee Receivable | Servicer Misc Fee Payable | $25    |
+| #   | Transaction     | Debit                        | Credit                                | Amount |
+| :-- | :-------------- | :--------------------------- | :------------------------------------ | :----- |
+| 7   | Assess late fee | Borrower Misc Fee Receivable | Unallocated Borrower Misc Fee Payable | $25    |
 
 #### Balance Sheet
 
@@ -78,9 +78,9 @@ Servicer assesses late fee:
 | Borrower Interest Receivable    | $100        | Unallocated Borrower Interest Payable | $100        |
 | Less: Borrower Interest Paid    | $0          |                                       |             |
 | **Net Interest Receivable**     | **$100**    |                                       |             |
-| Borrower Misc Fee Receivable    | $25         | Servicer Misc Fee Payable             | $25         |
-| Less: Borrower Misc Fee Paid    | $0          | Less: Servicer Misc Fee Paid          | $0          |
-| **Net Borrower Misc Fees**      | **$25**     | **Net Servicer Misc Fees**            | **$25**     |
+| Borrower Misc Fee Receivable    | $25         | Unallocated Borrower Misc Fee Payable | $25         |
+| Less: Borrower Misc Fee Paid    | $0          |                                       |             |
+| **Net Borrower Misc Fees**      | **$25**     |                                       |             |
 | **Total Assets**                | **$10,125** | **Total Liabilities + Equity**        | **$10,125** |
 
 ---
@@ -112,11 +112,12 @@ Allocate from the unallocated pool to servicer and investor. Then clear debts vi
 
 | #   | Transaction           | Debit                                 | Credit                    | Amount |
 | :-- | :-------------------- | :------------------------------------ | :------------------------ | :----- |
-| 9   | Allocate servicer fee | Unallocated Borrower Interest Payable | Servicer Fee Payable      | $10    |
-| 10  | Allocate to investor  | Unallocated Borrower Interest Payable | Investor Interest Payable | $90    |
-| 11  | Clear misc fee debt   | Borrower Payment Clearing             | Borrower Misc Fee Paid    | $25    |
-| 12  | Clear interest debt   | Borrower Payment Clearing             | Borrower Interest Paid    | $100   |
-| 13  | Clear principal debt  | Borrower Payment Clearing             | Borrower Principal Repaid | $800   |
+| 9   | Allocate misc fee     | Unallocated Borrower Misc Fee Payable | Servicer Misc Fee Payable | $25    |
+| 10  | Allocate servicer fee | Unallocated Borrower Interest Payable | Servicer Fee Payable      | $10    |
+| 11  | Allocate to investor  | Unallocated Borrower Interest Payable | Investor Interest Payable | $90    |
+| 12  | Clear misc fee debt   | Borrower Payment Clearing             | Borrower Misc Fee Paid    | $25    |
+| 13  | Clear interest debt   | Borrower Payment Clearing             | Borrower Interest Paid    | $100   |
+| 14  | Clear principal debt  | Borrower Payment Clearing             | Borrower Principal Repaid | $800   |
 
 ### Phase 4.c: Pay Out Parties
 
@@ -124,10 +125,10 @@ Withdraw from Cash to pay the servicer and investor.
 
 | #   | Transaction                      | Debit                   | Credit | Amount |
 | :-- | :------------------------------- | :---------------------- | :----- | :----- |
-| 14  | Pay servicer (svc fees)          | Servicer Fee Paid       | Cash   | $10    |
-| 15  | Pay servicer (misc fees)         | Servicer Misc Fee Paid  | Cash   | $25    |
-| 16  | Distribute interest to investor  | Investor Interest Paid  | Cash   | $90    |
-| 17  | Distribute principal to investor | Investor Principal Paid | Cash   | $800   |
+| 15  | Pay servicer (svc fees)          | Servicer Fee Paid       | Cash   | $10    |
+| 16  | Pay servicer (misc fees)         | Servicer Misc Fee Paid  | Cash   | $25    |
+| 17  | Distribute interest to investor  | Investor Interest Paid  | Cash   | $90    |
+| 18  | Distribute principal to investor | Investor Principal Paid | Cash   | $800   |
 
 #### Balance Sheet (After Phase 4)
 
@@ -168,9 +169,9 @@ _This scenario continues from Phase 3 above, but with a different outcome._
 
 ### Ledger Entries
 
-| #   | Transaction                         | Debit                     | Credit                       | Amount |
-| :-- | :---------------------------------- | :------------------------ | :--------------------------- | :----- |
-| 8   | Waive late fee (reverse receivable) | Servicer Misc Fee Payable | Borrower Misc Fee Receivable | $25    |
+| #   | Transaction                         | Debit                                 | Credit                       | Amount |
+| :-- | :---------------------------------- | :------------------------------------ | :--------------------------- | :----- |
+| 8   | Waive late fee (reverse receivable) | Unallocated Borrower Misc Fee Payable | Borrower Misc Fee Receivable | $25    |
 
 #### Balance Sheet
 
@@ -182,8 +183,10 @@ _This scenario continues from Phase 3 above, but with a different outcome._
 | Borrower Interest Receivable    | $100        | Unallocated Borrower Interest Payable | $100        |
 | Less: Borrower Interest Paid    | $0          |                                       |             |
 | **Net Interest Receivable**     | **$100**    |                                       |             |
-| Borrower Misc Fee Receivable    | $0          | Servicer Misc Fee Payable             | $0          |
+| Borrower Misc Fee Receivable    | $0          | Unallocated Borrower Misc Fee Payable | $0          |
 | **Total Assets**                | **$10,100** | **Total Liabilities + Equity**        | **$10,100** |
+
+> **Note:** Because an uncollected fee was never promoted to `Servicer Misc Fee Payable`, the waiver is a single self-contained reversal against the unallocated pool — no servicer accounts or `returnFunds` are involved.
 
 > **Note:** Subsequent payment follows the standard flow in [ledger_e2e_example.md](../ledger_e2e_example.md), without any late fee component.
 
@@ -215,9 +218,9 @@ _This scenario continues from Phase 4 (main flow) above. The late fee has alread
 
 | #   | Transaction                 | Debit                     | Credit                       | Amount | Entry Type                 |
 | :-- | :-------------------------- | :------------------------ | :--------------------------- | :----- | :------------------------- |
-| 18  | Reverse late fee assessment | Servicer Misc Fee Payable | Borrower Misc Fee Receivable | $25    | `ENTRY_ADJUSTMENT`         |
-| 19  | Servicer returns funds      | Cash                      | Servicer Misc Fee Paid       | $25    | `ENTRY_SERVICER_FUND_RETURN` |
-| 20  | Refund to borrower          | Borrower Misc Fee Paid    | Cash                         | $25    | `ENTRY_BORROWER_REFUND`    |
+| 19  | Reverse late fee assessment | Servicer Misc Fee Payable | Borrower Misc Fee Receivable | $25    | `ENTRY_ADJUSTMENT`         |
+| 20  | Servicer returns funds      | Cash                      | Servicer Misc Fee Paid       | $25    | `ENTRY_SERVICER_FUND_RETURN` |
+| 21  | Refund to borrower          | Borrower Misc Fee Paid    | Cash                         | $25    | `ENTRY_BORROWER_REFUND`    |
 
 #### Balance Sheet (After Refund)
 

@@ -1,0 +1,16 @@
+{
+  "blockNumber": 93194529,
+  "chain": "avalanche",
+  "chainId": 43114,
+  "commitHash": "4092336",
+  "component": "loans",
+  "contracts": {
+    "Loans": "0xE280dD04f2803bEe0560f9b306cFEAF084019A75",
+    "LoansExchange": "0xdBE3B52469F983993cA82D49f906aFf980FB2004",
+    "LoansNFT": "0xaBe56B83fB302Dc2b1E1736Ab18Df80B58F658fc",
+    "USDC": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"
+  },
+  "deploymentName": "pre-production",
+  "timestamp": 1787154999,
+  "version": "0.5.36"
+}

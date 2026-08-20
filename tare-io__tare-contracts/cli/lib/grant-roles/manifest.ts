@@ -5,6 +5,7 @@ import type { GrantRolesManifest } from "./types.js"
 const REQUIRED_ADDRESS_FIELDS = [
   "proposerSafe",
   "originatorSa",
+  "investorSa",
   "portfolioManagerSa",
   "investorManagerSa",
   "calculatingAgentSa",

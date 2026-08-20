@@ -94,11 +94,11 @@ export async function verifyConfiguration(
   guardian: Address,
   recoveryAddress: Address,
   deployer: Address,
-  whitelister?: Address
+  whitelister: Address
 ) {
   const section = "3. configuration"
 
-  // Informational: report the vault's current NAV so the §7.7 NAV bootstrap can
+  // Informational: report the vault's current NAV so the §7.8 NAV bootstrap can
   // be confirmed here rather than via a separate `cast call lastNav()`. Never gates.
   if (deployed.PortfolioVault && addresses.portfolioVault) {
     try {
@@ -218,17 +218,15 @@ export async function verifyConfiguration(
       DEAD_ADDRESS,
       "0xdead"
     )
-    if (whitelister !== undefined) {
-      await checker.checkHasRole(
-        section,
-        "VaultShareToken",
-        shareTokenAddr,
-        "WHITELISTER_ROLE",
-        whitelisterRole,
-        whitelister,
-        "whitelister"
-      )
-    }
+    await checker.checkHasRole(
+      section,
+      "VaultShareToken",
+      shareTokenAddr,
+      "WHITELISTER_ROLE",
+      whitelisterRole,
+      whitelister,
+      "whitelister"
+    )
     if (deployer !== whitelister) {
       await checker.checkDoesNotHaveRole(
         section,

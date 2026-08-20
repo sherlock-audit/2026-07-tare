@@ -19,18 +19,26 @@ Below is the full catalog of properties this codebase implicitly promises. Each 
 **Sign conventions** (from Accounts.sol: ids `<200` normally ≥ 0, `≥200` normally ≤ 0)
 
 - **[E]** `ACC_CASH ≥ 0` per loan — the only sign rule actually enforced (`InsufficientCashBalance` in `_updateBalances`).
+- **[C]** Cash-backing: the sum of positive withdrawable net payables — servicer fee, servicer misc fee, originator fee, `investorInterestWithdrawable`, `investorPrincipalWithdrawable` — is `≤ ACC_CASH`. The borrower-payment-backed legs — servicer fee, investor interest, investor principal, and (since the misc-fee collection gate) `ACC_SERVICER_MISC_FEE_PAYABLE` promoted from the unallocated pool — are all created in `applyWaterfall`, capped at `-ACC_BORROWER_PAYMENT_CLEARING` (cash the borrower actually paid). `ACC_ORIGINATOR_FEE_PAYABLE` is backed differently: `disburse` withholds it from commitment cash (transferring only the net to the borrower and leaving the fee in `ACC_CASH`), so it never routes through `ACC_BORROWER_PAYMENT_CLEARING`. Holds under all standard flows; only `createLedgerEntries` — which can mint a withdrawable payable with no matching cash — can break it, which is the documented trusted-servicer (T-4) risk.
 - **[C]** All other sign conventions (`ACC_BORROWER_PAYMENT_CLEARING ≤ 0`, receivables ≥ 0, payables ≤ 0, paid accounts on the correct side of zero). Normal flows preserve them (e.g. `applyWaterfall` caps allocations at `-clearing`; `refundBorrower` caps at `refundable`; `_clearReceivableDebt` caps at net outstanding), but `createLedgerEntries` can violate any of them. `getLoanAccountBalanceNormalized` silently returns negative values if broken.
 
 **Derived pair/mirror identities**
 
 - **[D]** `ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE == -(ACC_BORROWER_INTEREST_RECEIVABLE + ACC_BORROWER_INTEREST_PAID)`. Follows from `accrue` + `_processInterestPortion` writing matched entries; drift means an allocation/accrual path desynced.
+- **[D]** `ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE == -(ACC_BORROWER_MISC_FEE_RECEIVABLE + ACC_BORROWER_MISC_FEE_PAID)`. Mirror of the interest identity: `chargeMiscFee` stages the fee here and `applyWaterfall` promotes the collected portion to `ACC_SERVICER_MISC_FEE_PAYABLE`; drift means the misc charge/allocation paths desynced.
 - **[D]** `ACC_UNFUNDED_COMMITMENT ∈ [-P, 0]`; equals `-P` from `create` until `disburse`, exactly `0` afterwards.
 - **[D]** After `fund`, `ACC_INVESTOR_PRINCIPAL_PAYABLE == -commitment` **forever** (no normal flow touches it again; repayment runs through the `BORROWER_PRINCIPAL_REPAID`/`INVESTOR_PRINCIPAL_REPAID` pair). `getLoanValues` and hence NAV assume this.
 - **[D]** Net payables (`_getNetPayable` for servicer fee, misc fee, originator fee, investor interest, investor principal) are ≥ 0 **under standard flows** (allocations
-  capped, withdrawals take exactly the net). A negative net payable is a _legitimate, documented_ state reachable only via `createLedgerEntries` corrections: it records
-  that the counterparty owes the Loans contract.
+  capped, withdrawals take exactly the net). Negative net payables are only reachable via `createLedgerEntries` corrections, and only for the servicer's fee buckets
+  (a collectible debt: `returnFunds` and future fee allocations can cure it).
+- **[E]** **Investor nets are never negative:** `createLedgerEntries` reverts with `InvestorNetNegative` if a batch ends with the investor's net interest or net principal
+  payable below zero (transient in-batch negatives are allowed). Investor debt is uncollectible on-chain (no clawback), so the state is unrepresentable; corrections book
+  the delta through `ACC_SERVICER_ADJUSTMENT` instead. Consequence: `Investor Interest Paid + Investor Principal Repaid` always equals the cumulative currency sent to the
+  investor, and `investorWithdraw`'s per-bucket settlement is exact.
+- **[E]** **Indebted servicers cannot withdraw:** `servicerWithdraw` reverts with `ServicerOwesFunds` while either servicer fee bucket is negative. Cure paths: `returnFunds`,
+  a manual reclassification entry between the two servicer paid accounts (`ENTRY_SERVICER_FEE_RECLASSIFICATION`), or the next waterfall's fee allocation.
 - **[D]** `outstandingInvestorPrincipal ∈ [0, commitment]` and `investorPrincipalWithdrawable ≤ outstandingInvestorPrincipal` (the NavCalculator clamps negatives to 0 instead of asserting — so violations are _absorbed_, not surfaced).
-- **[D]** Cumulative "paid" accounts move monotonically except through the two explicit reversal paths (`returnFunds`, `refundBorrower`); `ACC_SERVICER_ADJUSTMENT` is monotone non-increasing (it's uncapped by design in `returnFunds`).
+- **[D]** Cumulative "paid" accounts move monotonically except through the two explicit reversal paths (`returnFunds`, `refundBorrower`); `ACC_SERVICER_ADJUSTMENT` is monotone non-increasing (it's uncapped by design in `returnFunds`), except that correction batches may pass it through as a write-off conduit (paired entries netting to zero).
 
 **Entry-store shape**
 
@@ -60,6 +68,7 @@ Below is the full catalog of properties this codebase implicitly promises. Each 
 - **[D]** Exactly one NFT per loan, `tokenId == loanId`, minted at `create`, **no burn path exists** ⟹ `totalSupply() == loanCount` and `ownerOf(loanId)` never reverts for a created loan. `investorWithdraw`/`fund`/NAV all assume this (a burned token would brick `fund` and NAV self-heals by silently dropping the loan — value quietly vanishes from NAV).
 - **[E]** `Loans.loansNFT` is set-once (`AlreadyInitialized`); `mint` callable only by `LOANS_CONTRACT`.
 - **[E]** Lock discipline (ERC-5753): locked ⟹ only unlocker can transfer; transfer auto-clears the lock; `approve` blocked and `getApproved` returns the unlocker while locked. Both privileged recovery paths refuse locked tokens: `forceTransfer` checks `_unlockers == 0` explicitly, and `rescueERC721Tokens` routes through the standard `_update` guard (`auth != unlocker ⟹ TokenLocked`), so guardian recovery can never break exchange escrow.
+- **[E]** Pause discipline: own OZ `Pausable` state (independent of `Loans`' — pausing one does not pause the other), auth resolved against `Loans` roles (admin/guardian/pauser can `pause`, guardian-only `unpause`). While paused, `transferFrom`/`safeTransferFrom`/`approve`/`setApprovalForAll`/`lock` revert `EnforcedPause`; `unlock` and `forceTransfer` deliberately stay live so incident recovery (`forceCancelOffer`, guardian rescue) keeps working.
 - **[D]** **`ownershipNonce[a]` bumps on _every_ change to `a`'s ownership set** — mint, burn, transfer, forceTransfer, all funnel through `_update`. This is the single most load-bearing "low direct impact" invariant in the system: `PortfolioVault._requireFreshNav` uses it to detect holdings changes. Any future transfer path that skips the bump = silently stale NAV accepted for share pricing.
 
 ## 5. LoansExchange — LoansExchange.sol
@@ -106,7 +115,7 @@ Below is the full catalog of properties this codebase implicitly promises. Each 
 
 - **[E]** `GUARDIAN_ROLE` is its own admin and that can never change (`CannotChangeGuardianAdmin`); `DEFAULT_ADMIN_ROLE`'s admin is locked to guardian at init (closing the OZ escalation hole).
 - **[E]** Pause ratchet: admin, guardian, or `PAUSER_ROLE` can pause; only guardian can unpause. `PAUSER_ROLE`'s admin is the guardian.
-- **[E]** At-least-one-guardian: `_revokeRole` reverts `LastGuardian` when revoking the final guardian (`guardianCount` tracks holders), so the guardian set can never drop to zero. `renounceRole` is disabled entirely (`RenounceRoleDisabled`) — roles are managed only by the guardian via `grant`/`revokeRole`, so no holder can self-strip access (which for the guardian would brick every admin-gated role).
+- **[E]** At-least-one-guardian: `_grantRole` rejects `address(0)` for `GUARDIAN_ROLE` (`InvalidGuardian`), so `guardianCount` only ever tracks callable guardians. `_revokeRole` reverts `LastGuardian` when revoking the final guardian (`guardianCount` tracks holders), so the guardian set can never drop to zero. `renounceRole` is disabled entirely (`RenounceRoleDisabled`) — roles are managed only by the guardian via `grant`/`revokeRole`, so no holder can self-strip access (which for the guardian would brick every admin-gated role).
 - **[D]** Address-book bit hygiene: register/unregister touch exactly one bit; the canonical book (`addressBook[address(this)]`) is writable only through `approve/revokeOriginator|Servicer` (`registerAddressOnBehalfOf` excludes `address(this)`), so canonical-book bits other than Originator/Servicer are never set. Nothing reads the other bits today → tripwire.
 - **[E]** No originator impersonation: `create` requires `msg.sender == originator` _and_ approval (or admin).
 
@@ -124,6 +133,6 @@ All **[O]** — asserted once by `verify-deployment`, silently violable at runti
 
 - Exact-set role membership everywhere (guardian = Timelock only, admin = Admin Safe only, deployer holds nothing) — not enumerable on-chain, so drift after day 1 is invisible without monitoring.
 - Pointer-triplet consistency (`exchange.LOANS == vault.loans`, `loansNFT.LOANS_CONTRACT == loans`, currencies all equal) — enforced **[E]** in `setLoans`/`setExchange` at swap time, but only there.
-- Timelock `minDelay`, proposer/canceller/executor sets, share-token role topology, SA owner sets `{Ops, HotProxy, Proposer}` at 2/3.
+- Timelock `minDelay`, proposer/canceller/executor sets, share-token role topology, SA owner sets `{Ops, Forwarder, Proposer}` at 2/3.
 
 ---

@@ -5,9 +5,10 @@ import {
   castCall,
   castCalldata,
   castSend,
-  getSenderAddress,
-  safeExec,
+  readOptionalContractAddress,
+  forwardExec,
 } from "../lib/cast.js"
+import { resolveForwarder } from "../lib/forwarder.js"
 import { isZero } from "../lib/onchain.js"
 import { outputResult } from "../lib/output.js"
 import { logProgress } from "../lib/utils.js"
@@ -24,7 +25,7 @@ export function registerSeedVault(program: Command): void {
     .option("--amount <usdc>", "Donation in whole USDC", "1")
     .option(
       "--impersonate",
-      "Anvil only: run updateNav by impersonating the Investor Manager SA instead of the hot-proxy TrustedCalls path"
+      "Anvil only: run updateNav by impersonating the Investor Manager SA instead of the relayed TrustedCalls path"
     )
     .action(function (this: Command, opts: { input?: string; amount: string; impersonate?: boolean }) {
       const cmd = this
@@ -77,13 +78,14 @@ export function registerSeedVault(program: Command): void {
         ]
       } else {
         // Production path: updateNav is on the TrustedCalls whitelist, so the
-        // Hot-Proxy Safe (registered delegate) routes it through the Investor
-        // Manager SA — the sender must be a hot-proxy owner.
-        const hotProxy = requireManifestField(manifest, "hotProxy", manifestPath)
+        // Forwarder (registered delegate) routes it through the Investor Manager
+        // SA — the sender must be an authorized sender of the Forwarder.
+        const forwarder = resolveForwarder({
+          manifest: manifest?.forwarder,
+          deployment: readOptionalContractAddress(root, config, "accounts", "Forwarder"),
+        })
         const outer = castCalldata("executeTrustedCall(address,address,bytes)", [investorManagerSa, vault, inner])
-        updateNavTxs = safeExec(hotProxy, trustedCalls, outer, deployment, {
-          sender: getSenderAddress(deployment),
-        }).txHashes
+        updateNavTxs = [forwardExec(forwarder, trustedCalls, outer, deployment).txHash]
       }
 
       const nav = lastNav()

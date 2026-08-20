@@ -65,6 +65,7 @@ export const SELECTOR_GROUPS: SelectorGroup[] = [
       { name: "investorWithdraw", sig: "investorWithdraw(uint64[],uint48,bytes32)" },
       { name: "originatorWithdraw", sig: "originatorWithdraw(uint64[],uint48,bytes32)" },
       { name: "updateLoanData", sig: "updateLoanData(uint64,uint8,uint48,uint48,uint48)" },
+      { name: "updateLoanTerms", sig: "updateLoanTerms(uint64,uint48,uint32,int128)" },
       { name: "chargeMiscFee", sig: "chargeMiscFee(uint64,int128,uint48,bytes32)" },
       { name: "createLedgerEntries", sig: "createLedgerEntries(uint64,uint48,(uint8,uint8,int128,uint16,bytes32)[])" },
       { name: "refundBorrower", sig: "refundBorrower(uint64,uint8,int128,uint48,uint16,bytes32)" },

@@ -82,6 +82,9 @@ export function registerGrantRoles(program: Command): void {
       const preChecks = checkGrantedRoles(ctx, roleIds)
       const batchSatisfied = preChecks.every((check) => check.satisfied)
       const shareholderSatisfied = shareholder ? shareholder.satisfied() : true
+      // Derived from the batch itself so the reported counts cannot drift when a
+      // grant is added to `buildGrantCalls`/`checkGrantedRoles`.
+      const totalGrants = preChecks.length + (shareholder ? 1 : 0)
       const allChecks = () => ({
         ...checksToRecord(checkGrantedRoles(ctx, roleIds)),
         ...(shareholder ? { [shareholder.label]: shareholder.satisfied() } : {}),
@@ -91,7 +94,7 @@ export function registerGrantRoles(program: Command): void {
         outputResult(cmd, {
           status: "ok",
           command: "grant-roles",
-          data: { scheduled: 0, executed: 0, skipped: includeShareholder ? 6 : 5, checks: allChecks() },
+          data: { scheduled: 0, executed: 0, skipped: totalGrants, checks: allChecks() },
         })
         return
       }
@@ -157,7 +160,7 @@ export function registerGrantRoles(program: Command): void {
         )
         scheduleTxHashes = batchResult.scheduleTxHashes
         executeTxHash = batchResult.executeTxHash
-        executed = 5
+        executed = grantCalls.length
 
         // Re-verify every grant landed; a missing grant fails the command.
         const postChecks = checkGrantedRoles(ctx, roleIds)
@@ -197,9 +200,9 @@ export function registerGrantRoles(program: Command): void {
         status: "ok",
         command: "grant-roles",
         data: {
-          scheduled: batchSatisfied ? 0 : 5,
+          scheduled: batchSatisfied ? 0 : grantCalls.length,
           executed,
-          skipped: (includeShareholder ? 6 : 5) - executed,
+          skipped: totalGrants - executed,
           operationId: operation.operationId,
           ...(scheduleTxHashes.length > 0
             ? { scheduleTxHash: scheduleTxHashes[scheduleTxHashes.length - 1], scheduleTxHashes }

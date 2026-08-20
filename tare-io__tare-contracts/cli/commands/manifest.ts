@@ -17,14 +17,22 @@ export function registerManifest(program: Command): void {
       "Record a roles-manifest field by hand (e.g. a Safe created in the Safe UI). Overwrites an existing value."
     )
     .argument("<field>", "Manifest field, e.g. adminSafe, proposerSafe, salt")
-    .argument("<value>", "Field value; addresses are checksummed and must have code on chain")
+    .argument("<value>", "Field value; addresses are checksummed and must have code on chain unless --eoa")
     .option("--output <path>", "Manifest path (default: derived roles/latest.json)")
-    .option("--no-code-check", "Skip the has-code-on-chain check for address fields")
-    .action(function (this: Command, field: string, value: string, opts: { output?: string; codeCheck: boolean }) {
+    .option("--eoa", "The value is an externally owned account: assert it has no code rather than requiring code")
+    .action(function (this: Command, field: string, value: string, opts: { output?: string; eoa?: boolean }) {
       const deployment = resolveDeployment(this)
 
-      if (isRolesManifestAddressField(field) && opts.codeCheck && !isContract(value, deployment)) {
-        throw new Error(`${field} ${value} has no code on chain (use --no-code-check for EOAs)`)
+      // Asserted either way rather than skipped, so recording a Safe as an EOA — or
+      // an EOA where a contract belongs — fails here instead of at first use.
+      if (isRolesManifestAddressField(field)) {
+        const hasCode = isContract(value, deployment)
+        if (opts.eoa && hasCode) {
+          throw new Error(`${field} ${value} has code on chain — drop --eoa`)
+        }
+        if (!opts.eoa && !hasCode) {
+          throw new Error(`${field} ${value} has no code on chain (use --eoa if it is one)`)
+        }
       }
 
       const { path, versionedPath, manifest } = writeRolesManifest(

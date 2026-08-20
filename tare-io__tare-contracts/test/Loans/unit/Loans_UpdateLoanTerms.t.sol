@@ -23,7 +23,7 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
 
   function test_UpdateLoanTerms_AsServicer() public {
     vm.prank(servicer);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
 
     (, uint32 interestRate, ) = loans.loanTerms(loanId);
     assertEq(interestRate, NEW_INTEREST_RATE);
@@ -31,7 +31,7 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
 
   function test_UpdateLoanTerms_AsAdmin() public {
     vm.prank(admin);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
 
     (, uint32 interestRate, ) = loans.loanTerms(loanId);
     assertEq(interestRate, NEW_INTEREST_RATE);
@@ -39,7 +39,7 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
 
   function test_UpdateLoanTerms_AsGuardian() public {
     vm.prank(guardian);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
 
     (, uint32 interestRate, ) = loans.loanTerms(loanId);
     assertEq(interestRate, NEW_INTEREST_RATE);
@@ -48,19 +48,19 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
   function test_UpdateLoanTerms_RevertsWhenUnauthorized() public {
     vm.prank(randomUser);
     vm.expectRevert(ILoans.Unauthorized.selector);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
   }
 
   function test_UpdateLoanTerms_RevertsWhenCalledByBorrower() public {
     vm.prank(borrower);
     vm.expectRevert(ILoans.Unauthorized.selector);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
   }
 
   function test_UpdateLoanTerms_RevertsForNonExistentLoan() public {
     vm.prank(admin);
     vm.expectRevert(ILoans.DoesNotExist.selector);
-    loans.updateLoanTerms(NON_EXISTENT_LOAN_ID, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(NON_EXISTENT_LOAN_ID, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
   }
 
   function test_UpdateLoanTerms_RevertsWhenPaused() public {
@@ -69,7 +69,7 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
 
     vm.prank(servicer);
     vm.expectRevert(Pausable.EnforcedPause.selector);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
   }
 
   // ========== Terminal Status ==========
@@ -80,7 +80,7 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
 
     vm.prank(servicer);
     vm.expectRevert(ILoans.InvalidStatus.selector);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
   }
 
   function test_UpdateLoanTerms_RevertsWhenClosed() public {
@@ -89,7 +89,7 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
 
     vm.prank(servicer);
     vm.expectRevert(ILoans.InvalidStatus.selector);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
   }
 
   // ========== Field Updates ==========
@@ -97,18 +97,18 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
   function test_UpdateLoanTerms_UpdatesOriginationDate() public {
     uint48 newDate = timeNow + 10 days;
     vm.prank(servicer);
-    loans.updateLoanTerms(loanId, newDate, 0, 0);
+    // The two value fields are always applied, so they must be restated to be preserved.
+    loans.updateLoanTerms(loanId, newDate, DEFAULT_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
 
     (uint48 originationDate, uint32 interestRate, int128 expectedMonthlyPayment) = loans.loanTerms(loanId);
     assertEq(originationDate, newDate);
-    // Untouched fields remain at their disburse values.
     assertEq(interestRate, DEFAULT_INTEREST_RATE);
     assertEq(expectedMonthlyPayment, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
   }
 
   function test_UpdateLoanTerms_UpdatesExpectedMonthlyPayment() public {
     vm.prank(servicer);
-    loans.updateLoanTerms(loanId, 0, 0, NEW_EXPECTED_MONTHLY_PAYMENT);
+    loans.updateLoanTerms(loanId, 0, DEFAULT_INTEREST_RATE, NEW_EXPECTED_MONTHLY_PAYMENT);
 
     (uint48 originationDate, uint32 interestRate, int128 expectedMonthlyPayment) = loans.loanTerms(loanId);
     assertEq(expectedMonthlyPayment, NEW_EXPECTED_MONTHLY_PAYMENT);
@@ -128,16 +128,38 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
     assertEq(expectedMonthlyPayment, NEW_EXPECTED_MONTHLY_PAYMENT);
   }
 
-  // ========== Sentinel (0 = no change) ==========
+  // ========== Zero Is A Value, Not A Sentinel ==========
 
-  function test_UpdateLoanTerms_ZeroLeavesFieldsUnchanged() public {
+  function test_UpdateLoanTerms_StoresZeroInterestRate() public {
     vm.prank(servicer);
-    loans.updateLoanTerms(loanId, 0, 0, 0);
+    loans.updateLoanTerms(loanId, 0, 0, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
+
+    (, uint32 interestRate, ) = loans.loanTerms(loanId);
+    assertEq(interestRate, 0);
+  }
+
+  function test_UpdateLoanTerms_StoresZeroExpectedMonthlyPayment() public {
+    vm.prank(servicer);
+    loans.updateLoanTerms(loanId, 0, DEFAULT_INTEREST_RATE, 0);
+
+    (, , int128 expectedMonthlyPayment) = loans.loanTerms(loanId);
+    assertEq(expectedMonthlyPayment, 0);
+  }
+
+  function test_UpdateLoanTerms_RevertsWhenExpectedMonthlyPaymentNegative() public {
+    vm.prank(servicer);
+    vm.expectRevert(ILoans.InvalidAmount.selector);
+    loans.updateLoanTerms(loanId, 0, DEFAULT_INTEREST_RATE, -1);
+  }
+
+  function test_UpdateLoanTerms_ZeroOriginationDateLeavesDateUnchanged() public {
+    vm.prank(servicer);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, NEW_EXPECTED_MONTHLY_PAYMENT);
 
     (uint48 originationDate, uint32 interestRate, int128 expectedMonthlyPayment) = loans.loanTerms(loanId);
     assertEq(originationDate, timeNow);
-    assertEq(interestRate, DEFAULT_INTEREST_RATE);
-    assertEq(expectedMonthlyPayment, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
+    assertEq(interestRate, NEW_INTEREST_RATE);
+    assertEq(expectedMonthlyPayment, NEW_EXPECTED_MONTHLY_PAYMENT);
   }
 
   // ========== Bookkeeping ==========
@@ -147,7 +169,7 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
     vm.warp(warpTo);
 
     vm.prank(servicer);
-    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, 0);
+    loans.updateLoanTerms(loanId, 0, NEW_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
 
     (, uint48 updatedAt, , , ) = loans.data(loanId);
     assertEq(updatedAt, warpTo);
@@ -158,8 +180,15 @@ contract Loans_UpdateLoanTermsTest is LoansTestBase {
 
     vm.prank(servicer);
     vm.expectEmit(true, false, false, true, address(loans));
-    // Only originationDate changes; other fields keep their disburse values.
+    // Only originationDate changes; the value fields are restated at their disburse values.
     emit ILoans.LoanTermsSet(loanId, newDate, DEFAULT_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
-    loans.updateLoanTerms(loanId, newDate, 0, 0);
+    loans.updateLoanTerms(loanId, newDate, DEFAULT_INTEREST_RATE, DEFAULT_EXPECTED_MONTHLY_PAYMENT);
+  }
+
+  function test_UpdateLoanTerms_EmitsLoanTermsSetWithZeroValues() public {
+    vm.prank(servicer);
+    vm.expectEmit(true, false, false, true, address(loans));
+    emit ILoans.LoanTermsSet(loanId, timeNow, 0, 0);
+    loans.updateLoanTerms(loanId, 0, 0, 0);
   }
 }

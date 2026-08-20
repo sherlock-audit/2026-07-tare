@@ -29,25 +29,27 @@ account stays at threshold 1**, and **the Timelock `minDelay` stays 0** (the
   production-path commands only surface during a manual rehearsal.
 - The runbooks contain repeated raw-bash sections (the §5 SA-creation loop +
   hand-written roles manifest, `SafeExec.s.sol` env-var invocations, the §9
-  `updateDelay` casts, the §7.7 vault seed, the fork USDC minting). Each is
+  `updateDelay` casts, the §7.8 vault seed, the fork USDC minting). Each is
   error-prone by hand; each becomes a command used by both the runbooks and
   the bake.
 
 ## Deployment model: production vs local
 
-| Aspect                   | Production                                    | Local bake                                                                   |
-| ------------------------ | --------------------------------------------- | ---------------------------------------------------------------------------- |
-| Safes                    | 5 Safes, rotated to M-of-N in §11             | 5 stand-in Safes, deployer sole owner, threshold 1, never rotated            |
-| Hot-Proxy Safe           | dedicated Safe, later 1-of-2 (HSM + Admin)    | the `HotSafe` already deployed by `deploy local` (threshold 1)               |
-| Guardian                 | Timelock on every contract                    | same (Timelock deployed locally, `minDelay = 0` forever)                     |
-| Admin                    | Admin Safe                                    | same (stand-in Admin Safe)                                                   |
-| Role smart accounts      | 8                                             | 8 (adds Shareholder, Portfolio Manager, Investor Manager, Calculating Agent) |
-| SA owners / threshold    | `{OpsMgmt, HotProxy, Proposer}`, 2/3          | `{OpsMgmt, deployer, HotProxy, Proposer}`, **threshold 1**                   |
-| `SHAREHOLDER_ROLE` grant | Whitelister Safe via Safe UI                  | `grant-roles --include-shareholder-grant` (SafeExec path)                    |
-| Vault NAV bootstrap      | manual §7.7 (cast + SafeExec)                 | `seed-vault` command, baked into the snapshot                                |
-| USDC                     | Circle native USDC                            | MockUSDC with public `mint`                                                  |
-| §9 hardening (36h delay) | run                                           | skipped                                                                      |
-| §11 ownership rotations  | run                                           | skipped                                                                      |
+| Aspect                   | Production                                                               | Local bake                                                                   |
+| ------------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Safes                    | 5 Safes, rotated to M-of-N in §10                                        | 5 stand-in Safes, deployer sole owner, threshold 1, never rotated            |
+| Hot-Proxy Safe           | dedicated Safe, later 1-of-2 (HSM + Admin)                               | the `HotSafe` already deployed by `deploy local` (threshold 1)               |
+| Guardian                 | Timelock on every contract                                               | same (Timelock deployed locally, `minDelay = 0` forever)                     |
+| Admin                    | Admin Safe                                                               | same (stand-in Admin Safe)                                                   |
+| Role smart accounts      | 8                                                                        | 8 (adds Shareholder, Portfolio Manager, Investor Manager, Calculating Agent) |
+| SA owners / threshold    | `{OpsMgmt, HotProxy, Proposer}`, 2/3                                     | `{OpsMgmt, deployer, HotProxy, Proposer}`, **threshold 1**                   |
+| `SHAREHOLDER_ROLE` grant | Whitelister Safe via Safe UI                                             | `grant-roles --include-shareholder-grant` (SafeExec path)                    |
+| Vault NAV bootstrap      | manual §7.8 (cast + SafeExec)                                            | `seed-vault` command, baked into the snapshot                                |
+| Vault counterparties     | Funder registered in the vault's book via the `grant-roles` batch (§7.6) | same                                                                         |
+| Vault liquidity          | real shareholder deposits                                                | 10M USDC deposited from the Shareholder SA (local extra)                     |
+| USDC                     | Circle native USDC                                                       | MockUSDC with public `mint`                                                  |
+| §8 hardening (36h delay) | run                                                                      | skipped                                                                      |
+| §10 ownership rotations  | run                                                                      | skipped                                                                      |
 
 The SA owner set matches production plus the deployer EOA. The deployer stays
 a direct owner so existing dev tooling (`set-allowance`, `debug-tx`,
@@ -176,7 +178,7 @@ tare-contracts safe-exec
 
 CLI wrapper around `script/SafeExec.s.sol` (which reads `SAFE_ADDRESS` /
 `TARGET_ADDRESS` / `CALL_DATA` from env — a repeated foot-gun in the runbooks;
-prod §7.7 and §9, anvil §3). Pre-flight asserts
+prod §7.8 and §9, anvil §3). Pre-flight asserts
 `safe.isOwner(sender) && threshold == 1` and reports a clear error instead of
 a forge revert. Other new commands shell into this rather than re-implementing
 the env-var dance.
@@ -206,7 +208,7 @@ tare-contracts seed-vault
   [--impersonate]              # anvil only: impersonate the investor-manager SA
 ```
 
-Replaces production §7.7 and anvil-rehearsal §4.1. Two steps, both verified:
+Replaces production §7.8 and anvil-rehearsal §4.1. Two steps, both verified:
 
 1. Donation: transfer `--amount` USDC to the `PortfolioVault` (on MockUSDC,
    mint directly; on a fork, requires the sender to hold USDC or
@@ -237,7 +239,7 @@ baked snapshot has always shipped). On MockUSDC it calls `mint` directly; with
 
 ### `grant-roles --include-shareholder-grant` (extension)
 
-Production §7.6 (`VaultShareToken.grantRole(SHAREHOLDER_ROLE, shareholderSa)`)
+Production §7.7 (`VaultShareToken.grantRole(SHAREHOLDER_ROLE, shareholderSa)`)
 is a Safe-UI flow on mainnet but a SafeExec call everywhere the Whitelister
 Safe is threshold-1 (rehearsal, bake). New optional flag on the existing
 `grant-roles` command: after the Timelock batch lands, execute the shareholder
@@ -281,25 +283,28 @@ Numbered against the production runbook sections each step rehearses:
       delegates, module, approvals, operator, address book,
       ownership transition (adds HotSafe + Proposer as owners);
       threshold stays 1 (see below)
- 7. grant-roles --include-shareholder-grant                      (§7.1–7.6)
-      approveOriginator + 4 role grants via Timelock (delay 0),
-      shareholder grant from the Whitelister Safe
+ 7. grant-roles --include-shareholder-grant                      (§7.1–7.7)
+      approveOriginator + role grants + vault book entry via
+      Timelock (delay 0), shareholder grant from the Whitelister Safe
  8. set-allowance SA → HotSafe for each SA                       (local extra)
       dev/e2e TrustedSpender transfer flows depend on these;
       production sets allowances per-need, not at setup
  9. fund-usdc                                                    (anvil §4)
-10. seed-vault --amount 1                                        (§7.7)
+10. seed-vault --amount 1                                        (§7.8)
       → lastNav = 1 USDC baked into the snapshot
-11. anvil_dumpState → state/anvil-state.json.gz                  (—)
-12. Write state/anvil-manifest.json (v2 shape below)             (—)
+11. safe-exec shareholder/investorManager → 10M USDC deposit     (local extra)
+      requestDeposit → approveDeposit → deposit, so the vault can
+      settle a purchase; a plain mint would move sharePrice off 1.0
+13. anvil_dumpState → state/anvil-state.json.gz                  (—)
+14. Write state/anvil-manifest.json (v2 shape below)             (—)
 ```
 
 Steps 5–10 need no `--input`/address flags — everything resolves from the
 deployment set in step 0 and the roles manifest it derives.
 
-Skipped relative to production: §9 (delay raise — local `minDelay` stays 0),
-§10 `verify-deployment` (optional CI follow-up, see open questions), §11
-(ownership rotations), §12–13 (publish/handoff).
+Skipped relative to production: §8 (delay raise — local `minDelay` stays 0),
+§9 `verify-deployment` (optional CI follow-up, see open questions), §10
+(ownership rotations), §11–12 (publish/handoff).
 
 The ownership-transition step in `setup-smart-accounts` currently hardcodes
 the production end state (`addOwnerWithThreshold(hotProxy, 1)` then
@@ -414,10 +419,10 @@ Once the commands exist, both runbooks shrink:
   per-address `export ADMIN_SAFE=…` / `export LOANS=$(jq …)` blocks; the
   UI-created Safes are recorded with `manifest set` instead.
 - Production §5 → one `create-role-accounts` invocation (no heredoc, no
-  manual version-pinned copy); §7.7 → `seed-vault`; §9 →
+  manual version-pinned copy); §7.8 → `seed-vault`; §9 →
   `update-timelock-delay`; the `SafeExec.s.sol` env-var blocks → `safe-exec`.
 - Anvil rehearsal §4 → `fund-usdc --impersonate-master-minter`; §4.1 →
-  `seed-vault --impersonate`; §3's §7.6 substitution →
+  `seed-vault --impersonate`; §3's §7.7 substitution →
   `grant-roles --include-shareholder-grant`.
 
 ## Open questions
@@ -461,8 +466,8 @@ tare-contracts:
 - [x] Rework `cli/bake-anvil-state.ts` to the sequence above (adds a
       `deploy safe-infra` bootstrap preset + `deploy local --keep-state` so
       stand-in Safes and the Timelock can be deployed before the protocol,
-      and `DEPLOY_HOT_SAFE_OWNER` so the HotSafe owner stays the hot-proxy
-      signing EOA when the admin becomes a Safe)
+      and `DEPLOY_FORWARDER_SENDER` so the relay's sender EOA stays the LMS
+      signing key when the admin becomes a Safe)
 - [x] Extend `AnvilManifest` / `src/anvil.ts` (v2 manifest)
 - [x] Commit `deployments/foundry/dev/{timelock,roles}` manifests
 - [x] Update both runbooks to use the new commands

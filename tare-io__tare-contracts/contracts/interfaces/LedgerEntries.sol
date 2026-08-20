@@ -26,3 +26,5 @@ uint16 constant ENTRY_INTEREST_REVERSAL = 19;
 uint16 constant ENTRY_INTEREST_RECLASSIFICATION = 20;
 uint16 constant ENTRY_BORROWER_REFUND = 21;
 uint16 constant ENTRY_SERVICER_FEE_REVERSAL = 22;
+uint16 constant ENTRY_MISC_FEE_ALLOCATION = 23;
+uint16 constant ENTRY_SERVICER_FEE_RECLASSIFICATION = 24; // manual reclassification between servicer paid accounts (never emitted by the contract)

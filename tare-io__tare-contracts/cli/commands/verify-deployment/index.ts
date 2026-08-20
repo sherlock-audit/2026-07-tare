@@ -6,12 +6,17 @@ import { DEFAULT_ANVIL_RPC } from "../../lib/constants.js"
 import { loadDeploymentManifest } from "../../lib/utils.js"
 import { rolesManifestPath } from "../../lib/roles-manifest.js"
 import { loadSetupManifest, smartAccountsFromManifest } from "../../lib/setup-smart-accounts/manifest.js"
+import { resolveForwarder } from "../../lib/forwarder.js"
 import { collectVerificationFailures, verifySmartAccountsSetup } from "../../lib/setup-smart-accounts/verification.js"
 import type { SetupContext } from "../../lib/setup-smart-accounts/types.js"
+import { readRoleIds } from "../../lib/grant-roles/build.js"
+import { checkGrantedRoles } from "../../lib/grant-roles/checks.js"
+import type { GrantChecksContext } from "../../lib/grant-roles/types.js"
 import type { GlobalOpts } from "../../lib/cast.js"
 import { Checker } from "./checker.js"
 import { verifyManifests, verifyDeployment, verifyWiring, verifyConfiguration, verifyTimelock } from "./phases.js"
 import { printResults } from "./output.js"
+import { resolveExpectedForwarderSenders } from "./expectations.js"
 import type { DeploymentManifest, Addresses, Addr, TimelockExpectations } from "./types.js"
 
 function addr(manifest: DeploymentManifest | null, key: string): Addr {
@@ -35,8 +40,9 @@ export function registerVerifyDeployment(program: Command): void {
     )
     .option(
       "--whitelister <address>",
-      "Expected VaultShareToken WHITELISTER_ROLE holder — if equal to --deployer the deployer-renounce check is skipped"
+      "Expected VaultShareToken WHITELISTER_ROLE holder (required)"
     )
+    .option("--forwarder-sender <address...>", "Expected exact Forwarder authorized-sender set")
     .option("--timelock-min-delay <seconds>", "Expected TimelockController minDelay in seconds")
     .option("--sa-threshold <n>", "Expected role smart-account threshold (production: 2; local dev: 1)", "2")
     .option(
@@ -52,6 +58,7 @@ export function registerVerifyDeployment(program: Command): void {
         deployer?: string
         recoveryAddress?: string
         whitelister?: string
+        forwarderSender?: string[]
         timelockMinDelay?: string
         saThreshold: string
         saAllowExtraOwners?: boolean
@@ -74,7 +81,6 @@ export function registerVerifyDeployment(program: Command): void {
       if (!rawDeployer) throw new Error("deployer address is required (--deployer or $DEPLOYER_ADDR)")
       const resolvedDeployer = getAddress(rawDeployer)
       const resolvedRecoveryAddress = getAddress(opts.recoveryAddress ?? resolvedGuardian)
-      const resolvedWhitelister = opts.whitelister ? getAddress(opts.whitelister) : undefined
 
       const saThreshold = Number.parseInt(opts.saThreshold, 10)
       if (!Number.isInteger(saThreshold) || saThreshold < 1 || saThreshold > 3) {
@@ -83,6 +89,14 @@ export function registerVerifyDeployment(program: Command): void {
 
       const chainConfig = getChainConfig(deploymentConfig.chain)
       const rpcUrl = opts.rpcUrl !== DEFAULT_ANVIL_RPC ? opts.rpcUrl : (chainConfig.rpc() ?? opts.rpcUrl)
+
+      if (!opts.whitelister) throw new Error("whitelister address is required (--whitelister)")
+      const resolvedWhitelister = getAddress(opts.whitelister)
+      const expectedForwarderSenders = resolveExpectedForwarderSenders(
+        opts.forwarderSender,
+        process.env.RELAYER_EOA,
+        deploymentConfig.chain === "foundry" ? getAddress(deploymentConfig.admin) : undefined
+      )
 
       console.log(chalk.bold(`Verifying deployment: ${deploymentName}`))
       console.log(chalk.dim(`Chain: ${deploymentConfig.chain} | RPC: ${rpcUrl}`))
@@ -155,17 +169,21 @@ export function registerVerifyDeployment(program: Command): void {
       const saSection = "5. smart accounts"
       try {
         const rolesManifest = loadSetupManifest(rolesManifestPath(root, deploymentConfig))
+        const forwarder = resolveForwarder({
+          manifest: rolesManifest.forwarder,
+          deployment: addr(accounts, "Forwarder") || null,
+        })
         const ctx: SetupContext = {
           loans: addresses.loans,
           usdc: addresses.usdc,
           trustedCalls: addresses.trustedCalls,
           trustedSpender: addresses.trustedSpender,
+          forwarder,
           loansNft: addresses.loansNFT,
           loansExchange: addresses.exchange,
           portfolioVault: addresses.portfolioVault,
           vaultShareToken: addresses.vaultShareToken,
           operationalManagementSafe: rolesManifest.operationalManagementSafe,
-          hotProxy: rolesManifest.hotProxy,
           guardianSafe: rolesManifest.guardianSafe,
           offramp: rolesManifest.offramp,
           smartAccounts: smartAccountsFromManifest(rolesManifest),
@@ -174,6 +192,24 @@ export function registerVerifyDeployment(program: Command): void {
           finalThreshold: saThreshold,
           allowExtraOwners: opts.saAllowExtraOwners ?? false,
         }
+        // The Forwarder's owner is who may rotate authorized senders — the Admin Safe on a live
+        // chain, where leaving it with the deployer would leave that power on a hot key.
+        // DeployLocal deliberately keeps the deployer so local setup needs no Safe hop.
+        await checker.checkAddressGetter(
+          saSection,
+          "Forwarder",
+          forwarder as Address,
+          "owner",
+          deploymentConfig.chain === "foundry" ? resolvedDeployer : resolvedAdmin
+        )
+        await checker.checkAddressSet(
+          saSection,
+          "Forwarder",
+          forwarder as Address,
+          "getAuthorizedSenders",
+          expectedForwarderSenders
+        )
+
         const verification = verifySmartAccountsSetup(ctx)
         const failures = collectVerificationFailures(verification, saThreshold)
         for (const failure of failures) checker.fail(saSection, failure, "postcondition not met")
@@ -182,6 +218,38 @@ export function registerVerifyDeployment(program: Command): void {
             checker.pass(saSection, `${role} SA: owners, threshold, modules, delegates, approvals OK`)
           }
         }
+
+        const grantSection = "6. setup grants"
+        const grantChecksContext: GrantChecksContext = {
+          loans: addresses.loans,
+          portfolioVault: addresses.portfolioVault,
+          navCalculator: addresses.navCalculator,
+          vaultShareToken: addresses.vaultShareToken,
+          manifest: {
+            originatorSa: ctx.smartAccounts.originator,
+            investorSa: ctx.smartAccounts.investor,
+            portfolioManagerSa: ctx.smartAccounts.portfolioManager,
+            investorManagerSa: ctx.smartAccounts.investorManager,
+            calculatingAgentSa: ctx.smartAccounts.calculatingAgent,
+            whitelisterSafe: resolvedWhitelister,
+          },
+          deployment: ctx.deployment,
+        }
+        for (const grantCheck of checkGrantedRoles(grantChecksContext, readRoleIds(grantChecksContext))) {
+          if (grantCheck.satisfied) checker.pass(grantSection, grantCheck.label)
+          else checker.fail(grantSection, grantCheck.label, "postcondition not met")
+        }
+
+        const shareholderRole = await checker.readBytes32(addresses.vaultShareToken as Address, "SHAREHOLDER_ROLE")
+        await checker.checkHasRole(
+          grantSection,
+          "VaultShareToken",
+          addresses.vaultShareToken as Address,
+          "SHAREHOLDER_ROLE",
+          shareholderRole,
+          ctx.smartAccounts.shareholder as Address,
+          "shareholder SA"
+        )
       } catch (err) {
         checker.fail(saSection, "roles manifest loaded and role SAs verified", String(err))
       }

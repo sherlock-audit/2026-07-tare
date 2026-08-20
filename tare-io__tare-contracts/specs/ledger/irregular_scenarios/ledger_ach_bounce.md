@@ -37,9 +37,9 @@ _This scenario continues from Phase 3 of [ledger_e2e_example.md](../ledger_e2e_e
 
 ### Ledger Entries
 
-| #   | Transaction    | Debit                        | Credit                    | Amount |
-| :-- | :------------- | :--------------------------- | :------------------------ | :----- |
-| 1   | Assess NSF fee | Borrower Misc Fee Receivable | Servicer Misc Fee Payable | $15    |
+| #   | Transaction    | Debit                        | Credit                                | Amount |
+| :-- | :------------- | :--------------------------- | :------------------------------------ | :----- |
+| 1   | Assess NSF fee | Borrower Misc Fee Receivable | Unallocated Borrower Misc Fee Payable | $15    |
 
 <details>
 <summary>Balance Sheet (After NSF Fee Assessment)</summary>
@@ -56,9 +56,7 @@ _This scenario continues from Phase 3 of [ledger_e2e_example.md](../ledger_e2e_e
 | Borrower Misc Fee Receivable    | $15        | Servicer Fee Payable                  | $10        |
 |                                 |            | Less: Servicer Fee Paid               | ($10)      |
 |                                 |            | **Net Servicer Fees**                 | **$0**     |
-|                                 |            | Servicer Misc Fee Payable             | $15        |
-|                                 |            | Less: Servicer Misc Fee Paid          | $0         |
-|                                 |            | **Net Servicer Misc Fees**            | **$15**    |
+|                                 |            | Unallocated Borrower Misc Fee Payable | $15        |
 | **Total Assets**                | **$9,515** | **Total Liabilities + Equity**        | **$9,515** |
 
 </details>
@@ -92,9 +90,7 @@ Interest and servicer fees continue to accrue. Before the next payment, $100 of 
 | Borrower Misc Fee Receivable    | $15        | Servicer Fee Payable                  | $10        |
 |                                 |            | Less: Servicer Fee Paid               | ($10)      |
 |                                 |            | **Net Servicer Fees**                 | **$0**     |
-|                                 |            | Servicer Misc Fee Payable             | $15        |
-|                                 |            | Less: Servicer Misc Fee Paid          | $0         |
-|                                 |            | **Net Servicer Misc Fees**            | **$15**    |
+|                                 |            | Unallocated Borrower Misc Fee Payable | $15        |
 | **Total Assets**                | **$9,615** | **Total Liabilities + Equity**        | **$9,615** |
 
 </details>
@@ -120,20 +116,21 @@ Interest and servicer fees continue to accrue. Before the next payment, $100 of 
 
 | #   | Transaction           | Debit                                 | Credit                    | Amount |
 | :-- | :-------------------- | :------------------------------------ | :------------------------ | :----- |
-| 4   | Allocate servicer fee | Unallocated Borrower Interest Payable | Servicer Fee Payable      | $10    |
-| 5   | Allocate to investor  | Unallocated Borrower Interest Payable | Investor Interest Payable | $90    |
-| 6   | Clear misc fee debt   | Borrower Payment Clearing             | Borrower Misc Fee Paid    | $15    |
-| 7   | Clear interest debt   | Borrower Payment Clearing             | Borrower Interest Paid    | $100   |
-| 8   | Clear principal debt  | Borrower Payment Clearing             | Borrower Principal Repaid | $500   |
+| 4   | Allocate misc fee     | Unallocated Borrower Misc Fee Payable | Servicer Misc Fee Payable | $15    |
+| 5   | Allocate servicer fee | Unallocated Borrower Interest Payable | Servicer Fee Payable      | $10    |
+| 6   | Allocate to investor  | Unallocated Borrower Interest Payable | Investor Interest Payable | $90    |
+| 7   | Clear misc fee debt   | Borrower Payment Clearing             | Borrower Misc Fee Paid    | $15    |
+| 8   | Clear interest debt   | Borrower Payment Clearing             | Borrower Interest Paid    | $100   |
+| 9   | Clear principal debt  | Borrower Payment Clearing             | Borrower Principal Repaid | $500   |
 
 ### Phase C: Pay Out Parties
 
 | #   | Transaction                      | Debit                   | Credit | Amount |
 | :-- | :------------------------------- | :---------------------- | :----- | :----- |
-| 9   | Pay servicer (svc fees)          | Servicer Fee Paid       | Cash   | $10    |
-| 10  | Pay servicer (misc fees)         | Servicer Misc Fee Paid  | Cash   | $15    |
-| 11  | Distribute interest to investor  | Investor Interest Paid  | Cash   | $90    |
-| 12  | Distribute principal to investor | Investor Principal Paid | Cash   | $500   |
+| 10  | Pay servicer (svc fees)          | Servicer Fee Paid       | Cash   | $10    |
+| 11  | Pay servicer (misc fees)         | Servicer Misc Fee Paid  | Cash   | $15    |
+| 12  | Distribute interest to investor  | Investor Interest Paid  | Cash   | $90    |
+| 13  | Distribute principal to investor | Investor Principal Paid | Cash   | $500   |
 
 <details>
 <summary>Balance Sheet (After Payment)</summary>

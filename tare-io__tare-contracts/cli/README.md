@@ -86,7 +86,7 @@ Deploy all contracts to a local Anvil instance.
 tare-contracts deploy local [-r, --rpc-url <url>]
 ```
 
-Deploys MockUSDC, Safe infrastructure, Loans, Accounts (SmartAccountFactory, TrustedCalls, TrustedSpender), a HotSafe, and transfers admin. Uses the default Anvil account.
+Deploys MockUSDC, Safe infrastructure, Loans, Accounts (SmartAccountFactory, TrustedCalls, TrustedSpender, Forwarder), and transfers admin. Uses the default Anvil account.
 
 #### `deploy loans`
 
@@ -104,11 +104,58 @@ Deploy Smart Account infrastructure to a remote network.
 tare-contracts deploy accounts --chain baseSepolia --deployer-addr 0x... --private-key 0x...
 ```
 
+#### `deploy forwarder`
+
+Deploy the Forwarder relay every role SA authorizes, and record it in the roles manifest so
+`setup-smart-accounts` picks it up without a flag. `deploy local` already deploys one into the
+accounts component, so this is for every other chain — run it before `setup-smart-accounts`.
+
+```bash
+pnpm tare-contracts --chain avalanche --name production deploy forwarder \
+  --owner 0x...
+```
+
+- `--owner <address>` (required): the constructor's `initialOwner` — the address that may rotate
+  authorized senders. Required so a deployment can never silently keep the deployer as owner; name
+  the Admin Safe on a live chain. Must be a contract unless it is the deployer itself.
+- `--sender <address...>`: the authorized sender EOA(s) the LMS relay signs with. `setAuthorizedSenders`
+  is owner-only, so this is accepted only when `--owner` is the deployer; otherwise deploy without it
+  and run `forwarder set-senders`.
+- `--currency <address>`: the one target the Forwarder refuses to forward calls to, so a bare token
+  transfer can never be relayed. Defaults to `USDC` from the loans manifest, then the config.
+- Writes its own `forwarder` deployment component, which `generate-deployments` prefers over the
+  accounts component's `Forwarder`, and records `forwarder` in the roles manifest. Recording will
+  not clobber a different recorded address — use `manifest set forwarder` to replace one.
+- The CREATE3 salt includes the package.json version; re-deploying under the same deployment name
+  requires a version bump, or the create reverts with `CreateCollision`.
+
+#### `deploy cctp-bridge`
+
+Deploy the `CctpBridgeModule` custody module. Base mainnet only — the module's route
+(Base USDC → Avalanche via CCTP v2) is hardcoded.
+
+```bash
+pnpm tare-contracts --chain base --name production deploy cctp-bridge \
+  --safe 0x... \
+  --mint-recipient 0x...
+```
+
+- `--safe`: the intake Safe whose USDC the module bridges (must already exist on Base).
+- `--mint-recipient`: destination recipient on Avalanche. It is baked into the module as an
+  immutable and a wrong value burns funds irrecoverably — verify it independently after deploy.
+- Global `--chain` / `--name` flags must come **before** the `deploy cctp-bridge` subcommand.
+- Requires `BASE_RPC`, `ETHERSCAN_API_KEY`, and a signer (`--account`/`DEPLOYER_ACCOUNT` plus
+  `DEPLOYER_ADDR`, or `--private-key`).
+- The CREATE3 salt includes the package.json version; re-deploying under the same deployment
+  name requires a version bump, or the create reverts with `CreateCollision`.
+- After deploy: enable the module on the Safe (threshold-gated), then run a small canary
+  `bridge(0)` before routing real funds. See `specs/cctp-bridge-module.md`.
+
 ---
 
 ### setup-smart-accounts
 
-Configure all eight role smart accounts from a manifest: hot-proxy delegation, approvals, vault wiring, address-book registrations, and final ownership transition to `{ operationalManagementSafe, hotProxy, guardianSafe }` with threshold `2`.
+Configure all eight role smart accounts from a manifest: Forwarder delegation, approvals, vault wiring, address-book registrations, and final ownership transition to `{ operationalManagementSafe, forwarder, guardianSafe }` with threshold `2`.
 
 ```bash
 tare-contracts setup-smart-accounts \
@@ -126,6 +173,8 @@ tare-contracts setup-smart-accounts \
 - `--skip-preconditions`: bypass strict bootstrap-state checks (required for re-running after partial/completed setup).
 - `--final-threshold <n>`: SA threshold after the ownership transition, and the value the postcondition gate asserts each SA's threshold against (default `2`; local dev uses `1`).
 - `--allow-extra-owners`: make the postcondition gate verify the expected owner set as a subset of the actual owners instead of the exact set (local dev, where the deployer stays an owner).
+- `--forwarder <address>`: the relay every role SA authorizes, overriding the manifest's `forwarder`. Defaults to the roles manifest's `forwarder` (recorded by [`deploy forwarder`](#deploy-forwarder)), then `Forwarder` in the `forwarder` or `accounts` deployment component — the latter is what `deploy local` populates.
+  The Forwarder takes an owner slot on every role SA, which is what lets an authorized sender confirm a Safe transaction with a `v = 1` pre-validated signature; with `--final-threshold 2` it is one required signature rather than sufficient on its own.
 
 After a non-dry run, the command re-reads every postcondition (owners, threshold, modules, delegates, allowances, operator flags, registrations) and **fails with exit code 1** if any does not hold — a completed run never reports `ok` while a smart account is misconfigured.
 
@@ -134,7 +183,6 @@ After a non-dry run, the command re-reads every postcondition (owners, threshold
 ```json
 {
   "operationalManagementSafe": "0x...",
-  "hotProxy": "0x...",
   "guardianSafe": "0x...",
   "originatorSa": "0x...",
   "borrowerSa": "0x...",
@@ -144,11 +192,12 @@ After a non-dry run, the command re-reads every postcondition (owners, threshold
   "portfolioManagerSa": "0x...",
   "investorManagerSa": "0x...",
   "calculatingAgentSa": "0x...",
-  "offramp": "0x..."
+  "offramp": "0x...",
+  "forwarder": "0x..."
 }
 ```
 
-`offramp` is optional. All other fields are required. The command validates address format, non-zero values, duplicate SA addresses, and infra-safe distinctness.
+`offramp` and `forwarder` are optional. All other fields are required. The command validates address format, non-zero values, duplicate SA addresses, and infra-safe distinctness.
 
 #### Phase order
 
@@ -158,17 +207,17 @@ After a non-dry run, the command re-reads every postcondition (owners, threshold
 
 #### Main actions performed
 
-- Common per-SA: `TrustedCalls.addDelegate`, `TrustedSpender.addDelegate`, `enableModule(TrustedCalls)`, `USDC.approve(TrustedSpender, MAX)`
+- Common per-SA: `TrustedCalls.addDelegate(forwarder)`, `TrustedSpender.addDelegate(forwarder)`, `enableModule(TrustedCalls)`, `USDC.approve(TrustedSpender, MAX)`
 - Borrower/investor/servicer: `USDC.approve(Loans, MAX)`
 - Borrower (optional): `TrustedSpender.setAllowance(..., offramp, MAX)` when `offramp` is present
-- Investor: `LoansNFT.setApprovalForAll(LoansExchange, true)` and `Loans.registerAddress(Investor, portfolioVault)`
-- Shareholder: `USDC.approve(PortfolioVault, MAX)`, `VaultShareToken.approve(PortfolioVault, MAX)`, `PortfolioVault.setOperator(hotProxy, true)`
+- Investor: `LoansNFT.setApprovalForAll(LoansExchange, true)` and `Loans.registerAddress(Investor, portfolioVault)` (the seller-side book; the buyer-side entry in the vault's book lands in the `grant-roles` Timelock batch)
+- Shareholder: `USDC.approve(PortfolioVault, MAX)`, `VaultShareToken.approve(PortfolioVault, MAX)`, `PortfolioVault.setOperator(forwarder, true)`
 - Originator: register borrower/investor/servicer peers in the originator SA address book
-- Ownership transition: `addOwnerWithThreshold(hotProxy, 1)` then `addOwnerWithThreshold(guardianSafe, 2)`
+- Ownership transition: `addOwnerWithThreshold(forwarder, 1)` then `addOwnerWithThreshold(guardianSafe, 2)`
 
 #### Output
 
-The command returns grouped step results by category (`hotProxyDelegation`, `moduleActivation`, `approvals`, `vaultWiring`, `disbursement`, `addressBook`, `ownership`) plus per-role verification checks.
+The command returns grouped step results by category (`relayDelegation`, `moduleActivation`, `approvals`, `vaultWiring`, `disbursement`, `addressBook`, `ownership`) plus per-role verification checks.
 
 ```json
 {
@@ -178,7 +227,7 @@ The command returns grouped step results by category (`hotProxyDelegation`, `mod
   },
   "verification": {
     "investor": {
-      "ownerSet == {opsMgmt, hotProxy, guardianSafe}": true,
+      "ownerSet == {opsMgmt, forwarder, guardianSafe}": true,
       "threshold": 2,
       "Loans.isRegisteredForRole(SA, Investor, portfolioVault)": true
     }
@@ -290,6 +339,37 @@ Returns `{ allowance, isMaxApproval }`.
 
 ---
 
+### forwarder
+
+Manage the Forwarder relay after `deploy forwarder`.
+
+#### `forwarder set-senders`
+
+```bash
+tare-contracts --chain avalanche --name production forwarder set-senders \
+  --sender 0x... [--sender 0x...] \
+  [--forwarder 0x...] \
+  --account dp
+```
+
+- Replaces the **whole** authorized-sender set — anything omitted stops being able to relay.
+- `setAuthorizedSenders` is owner-only, so the route is derived from the Forwarder's own `owner()`:
+  a direct send when the signer is the owner, otherwise `SafeExec` through the owning Safe while it
+  is still threshold-1. A multi-sig owner goes through the Safe UI instead.
+- `--forwarder` defaults to the roles manifest, then the `forwarder`/`accounts` deployment component.
+- Re-reads `isAuthorizedSender` for every sender afterwards and fails if one did not take — an
+  unauthorized relayer otherwise only surfaces as every relayed call reverting.
+
+#### `forwarder check`
+
+```bash
+tare-contracts --chain avalanche --name production forwarder check
+```
+
+Returns `{ forwarder, owner, currencyGuard, senders }`.
+
+---
+
 ### set-allowance
 
 Manage TrustedSpender allowances.
@@ -347,6 +427,7 @@ carries only deploy-specific inputs:
   "salt": "avalanche-production:setup-grants:v1",
 
   "originatorSa": "0x...",
+  "investorSa": "0x...",
   "portfolioManagerSa": "0x...",
   "investorManagerSa": "0x...",
   "calculatingAgentSa": "0x...",
@@ -354,17 +435,21 @@ carries only deploy-specific inputs:
 }
 ```
 
-All seven fields are required. The five grants, batched in this order:
+All eight fields are required. The six grants, batched in this order:
 
 1. `Loans.approveOriginator(originatorSa)`
 2. `PortfolioVault.grantRole(PORTFOLIO_MANAGER, portfolioManagerSa)`
 3. `PortfolioVault.grantRole(INVESTOR_MANAGER, investorManagerSa)`
 4. `NavCalculator.grantRole(CALCULATING_AGENT, calculatingAgentSa)`
 5. `VaultShareToken.grantRole(WHITELISTER_ROLE, whitelisterSafe)`
+6. `PortfolioVault.registerAddress(investorSa)` — registers the investor SA as
+   Investor in the vault's own Loans address book; `LoansExchange.acceptOffer`
+   checks both parties' books, so without this entry every Funder → vault
+   settlement reverts `SellerNotRegistered`
 
-**Idempotent.** Before scheduling, the command checks whether all five grants
+**Idempotent.** Before scheduling, the command checks whether all six grants
 are already in place; if so it exits `0` with `{ scheduled: 0, executed: 0,
-skipped: 5 }` and submits nothing. `salt` is hashed to a deterministic
+skipped: 6 }` and submits nothing. `salt` is hashed to a deterministic
 `bytes32`, so a partial-failure retry must bump the salt (e.g. `:v2`) to avoid
 colliding with the previous batch's operation hash.
 
@@ -380,8 +465,8 @@ Output:
   "status": "ok",
   "command": "grant-roles",
   "data": {
-    "scheduled": 5,
-    "executed": 5,
+    "scheduled": 6,
+    "executed": 6,
     "skipped": 0,
     "operationId": "0x...",
     "scheduleTxHash": "0x...",
@@ -437,7 +522,7 @@ Commands that interact with Safe smart accounts use the `SafeExec.s.sol` forge s
 
 This requires the `--private-key` signer to be an owner of the target Safe.
 
-For **nested Safe execution** (e.g., HotProxy owns SmartAccount), the CLI:
+For **nested Safe execution** (e.g., the Ops Mgmt Safe owns a SmartAccount), the CLI:
 
 1. Uses `SafeExec` on the outer Safe to call `approveHash` on the inner Safe
 2. Calls `execTransaction` on the inner Safe with the outer Safe's signature

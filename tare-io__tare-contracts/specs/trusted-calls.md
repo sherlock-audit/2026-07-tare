@@ -14,6 +14,7 @@ A Safe module that enables delegates to execute whitelisted functions on behalf 
 - Delegates are authorized to execute trusted calls on behalf of their assigned Safe
 - Only Safe owners and guardians can add delegates
 - Safe owners, admins, and guardians can remove delegates
+- The registered delegate is the [Forwarder](./forwarder.md), the nonce-free hot relay
 
 ### Trusted Calls Model
 
@@ -32,7 +33,7 @@ A Safe module that enables delegates to execute whitelisted functions on behalf 
 
 The deployment script (`DeploySmartAccountsLibrary`) registers the following functions as trusted calls. These are the operations that delegates (hot wallets) can execute on behalf of Safes without requiring multisig approval.
 
-**Loans contract (14 calls):**
+**Loans contract (15 calls):**
 
 | Function                 | Purpose                                            |
 | ------------------------ | -------------------------------------------------- |
@@ -46,6 +47,7 @@ The deployment script (`DeploySmartAccountsLibrary`) registers the following fun
 | `investorWithdraw`       | Withdraw investor principal and interest           |
 | `originatorWithdraw`     | Withdraw originator fees                           |
 | `updateLoanData`         | Update loan status and dates                       |
+| `updateLoanTerms`        | Reprice a loan after origination                   |
 | `chargeMiscFee`          | Charge a miscellaneous fee to borrower             |
 | `createLedgerEntries`    | Create internal ledger corrections                 |
 | `refundBorrower`         | Refund overpayments to borrower                    |

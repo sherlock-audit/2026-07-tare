@@ -356,4 +356,40 @@ contract Loans_DisburseTest is LoansTestBase {
       DISBURSE_REF
     );
   }
+
+  function test_disburse_revert_invalidAmount_whenExpectedMonthlyPaymentNegative() public {
+    vm.prank(originator);
+    vm.expectRevert(ILoans.InvalidAmount.selector);
+    loans.disburse(
+      loanId,
+      NET_DISBURSED,
+      ORIGINATION_FEE,
+      originationDate,
+      nextDueDate,
+      maturityDate,
+      DEFAULT_INTEREST_RATE,
+      -1,
+      timeNow,
+      DISBURSE_REF
+    );
+  }
+
+  function test_disburse_storesZeroExpectedMonthlyPayment() public {
+    vm.prank(originator);
+    loans.disburse(
+      loanId,
+      NET_DISBURSED,
+      ORIGINATION_FEE,
+      originationDate,
+      nextDueDate,
+      maturityDate,
+      DEFAULT_INTEREST_RATE,
+      0,
+      timeNow,
+      DISBURSE_REF
+    );
+
+    (, , int128 expectedMonthlyPayment) = loans.loanTerms(loanId);
+    assertEq(expectedMonthlyPayment, 0);
+  }
 }

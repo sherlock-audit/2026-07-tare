@@ -24,12 +24,6 @@ export const LOCAL_VERIFICATION_TARGETS: ReadonlyArray<{
     contractIdentifier: "contracts/LoansNFT.sol:LoansNFT",
   },
   {
-    deploymentFile: "loans",
-    contractKey: "HotSafe",
-    artifactPath: "out/SafeProxy.sol/SafeProxy.json",
-    contractIdentifier: "lib/safe-smart-account/contracts/proxies/SafeProxy.sol:SafeProxy",
-  },
-  {
     deploymentFile: "accounts",
     contractKey: "SafeProxyFactory",
     artifactPath: "out/SafeProxyFactory.sol/SafeProxyFactory.json",

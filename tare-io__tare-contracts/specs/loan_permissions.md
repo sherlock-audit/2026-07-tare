@@ -10,11 +10,11 @@ We will want to use a Safe for every user that interacts with our system and cre
 
 This is defined in [specs/smart-accounts.md](./smart-accounts.md)
 
-In addition to the regular multisig signers, there are two modules on the Safe that allow a less trustworthy key (our Tare Hot Proxy) to do interactions on behalf of the user:
+In addition to the regular multisig signers, there are two modules on the Safe that allow a less trustworthy key (our Tare hot wallet, relaying through the Forwarder) to do interactions on behalf of the user:
 
 ### Trusted Caller Safe Plugin
 
-The Whitelisted Caller Safe plugin maintains a list of trusted function calls that can not lead to any unsafe results in the Tare LMS. These calls can be called by the Tare Hot Wallet (through the Tare Hot Proxy). Any other call will require a multisig transaction that requires manual actions by owners of the signing keys.
+The Whitelisted Caller Safe plugin maintains a list of trusted function calls that can not lead to any unsafe results in the Tare LMS. These calls can be called by the Tare hot wallet (through the Forwarder). Any other call will require a multisig transaction that requires manual actions by owners of the signing keys.
 
 This is defined in [specs/trusted-calls.md](./trusted-calls.md)
 
@@ -164,6 +164,7 @@ The Loans contract inherits OZ `Pausable` via `GuardianAccessControl`. When paus
 **Functions blocked when paused** (`whenNotPaused`):
 
 - `create` — Loan origination
+- `updateLoanData` — Loan status/date updates (status transitions require unpausing first)
 - `fund` — Investor funding
 - `disburse` — Disbursement to borrower
 - `accrue` — Interest/fee accrual
@@ -184,7 +185,6 @@ The Loans contract inherits OZ `Pausable` via `GuardianAccessControl`. When paus
 
 **Functions intentionally NOT paused** (administrative or corrective operations):
 
-- `updateLoanData` — Status transitions (e.g. marking charged-off) needed during pause
 - `setLoansNFT` — Initial contract wiring
 - `setRecoveryAddress` — Setting rescue destination
 - `setRoleAdmin` — Role hierarchy configuration

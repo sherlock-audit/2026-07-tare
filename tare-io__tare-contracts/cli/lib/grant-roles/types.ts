@@ -9,22 +9,37 @@ export interface GrantRolesManifest {
   proposerSafe: string
   salt: string
   originatorSa: string
+  investorSa: string
   portfolioManagerSa: string
   investorManagerSa: string
   calculatingAgentSa: string
   whitelisterSafe: string
 }
 
-/** Resolved protocol addresses + manifest inputs shared by all steps. */
-export interface GrantRolesContext {
+export type GrantChecksManifest = Pick<
+  GrantRolesManifest,
+  | "originatorSa"
+  | "investorSa"
+  | "portfolioManagerSa"
+  | "investorManagerSa"
+  | "calculatingAgentSa"
+  | "whitelisterSafe"
+>
+
+export interface GrantChecksContext {
   loans: string
   portfolioVault: string
   navCalculator: string
   vaultShareToken: string
+  manifest: GrantChecksManifest
+  deployment: ResolvedDeployment
+}
+
+/** Resolved protocol addresses + manifest inputs shared by all steps. */
+export interface GrantRolesContext extends GrantChecksContext {
   timelock: string
   proposerSafe: string
   manifest: GrantRolesManifest
-  deployment: ResolvedDeployment
   sender: string
 }
 

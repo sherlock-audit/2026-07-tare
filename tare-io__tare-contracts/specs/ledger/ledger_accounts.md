@@ -39,8 +39,9 @@ Use `account >= 200` to check if an account is normally negative.
 | `ACC_SERVICER_FEE_PAYABLE`                  | 204   | Obligation to pay the servicer                                                                               |
 | `ACC_ORIGINATOR_FEE_PAYABLE`                | 205   | Obligation to pay the originator their origination fee                                                       |
 | `ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE` | 206   | Staging account for accrued borrower obligations before waterfall allocation                                 |
-| `ACC_SERVICER_MISC_FEE_PAYABLE`             | 207   | Obligation to pay the servicer for misc fees (late/NSF)                                                      |
+| `ACC_SERVICER_MISC_FEE_PAYABLE`             | 207   | Obligation to pay the servicer for misc fees (late/NSF), recognized only once the borrower pays |
 | `ACC_SERVICER_ADJUSTMENT`                   | 208   | Permanent record of servicer-funded adjustments (e.g., borrower refunds when excess was already distributed) |
+| `ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE` | 209   | Staging account for charged-but-uncollected misc fees before waterfall allocation                            |
 
 ### 4. Contra-Assets (250-255)
 

@@ -2,9 +2,10 @@ import type { Command } from "commander"
 import { applyRoleHolderEnv, deploy } from "../lib/deploy.js"
 import { DEFAULT_ANVIL_ADDR, DEFAULT_ANVIL_KEY, getDeploymentConfig } from "../lib/deployment-configs.js"
 import { DEFAULT_ANVIL_RPC, ZERO_ADDRESS } from "../lib/constants.js"
-import type { GlobalOpts } from "../lib/cast.js"
+import { readOptionalContractAddress, type GlobalOpts } from "../lib/cast.js"
 import { checksum } from "../lib/utils.js"
-import { readRolesManifest, rolesManifestPath } from "../lib/roles-manifest.js"
+import { assertSendersSettableAtDeploy, resolveAuthorizedSenders } from "../lib/forwarder.js"
+import { readRolesManifest, rolesManifestPath, writeRolesManifest } from "../lib/roles-manifest.js"
 
 export function registerDeploy(program: Command): void {
   const deployCmd = program.command("deploy").description("Deploy contracts")
@@ -15,11 +16,14 @@ export function registerDeploy(program: Command): void {
     .option("-r, --rpc-url <url>", "Anvil RPC URL", process.env.ANVIL_RPC ?? DEFAULT_ANVIL_RPC)
     .option("--admin <address>", "ADMIN_ROLE holder (default: roles-manifest adminSafe, then config)")
     .option("--guardian <address>", "GUARDIAN_ROLE holder (default: timelock manifest, then config)")
-    .option("--hot-safe-owner <address>", "HotSafe owner EOA (default: the admin address)")
+    .option(
+      "--forwarder-sender <address>",
+      "The Forwarder's authorized sender — the key the LMS relay signs with (default: the admin address)"
+    )
     .option("--keep-state", "Keep existing anvil state (no anvil_reset) — pre-deployed Safes/Timelock survive")
     .action(async function (
       this: Command,
-      opts: { rpcUrl: string; admin?: string; guardian?: string; hotSafeOwner?: string; keepState?: boolean }
+      opts: { rpcUrl: string; admin?: string; guardian?: string; forwarderSender?: string; keepState?: boolean }
     ) {
       const { name, chain, root } = this.optsWithGlobals() as GlobalOpts
       const deploymentName = `${chain ?? "foundry"}-${name}`
@@ -27,7 +31,9 @@ export function registerDeploy(program: Command): void {
       // were deployed into survives — i.e. with --keep-state. A reset falls back
       // to explicit flags or the static config EOAs.
       applyRoleHolderEnv(root, deploymentName, opts, opts.keepState ?? false)
-      if (opts.hotSafeOwner) process.env.DEPLOY_HOT_SAFE_OWNER = checksum("--hot-safe-owner")(opts.hotSafeOwner)
+      if (opts.forwarderSender) {
+        process.env.DEPLOY_FORWARDER_SENDER = checksum("--forwarder-sender")(opts.forwarderSender)
+      }
       await deploy({
         preset: "local",
         root,
@@ -138,5 +144,83 @@ export function registerDeploy(program: Command): void {
         account: useAnvilDefaults ? undefined : account,
         deployerAddr: resolvedDeployerAddr,
       })
+    })
+
+  deployCmd
+    .command("forwarder")
+    .description("Deploy the Forwarder relay every role SA authorizes, and record it in the roles manifest")
+    .option(
+      "--currency <address>",
+      "Protocol currency the Forwarder refuses to forward to (default: loans manifest USDC)"
+    )
+    .option(
+      "--sender <address...>",
+      "Authorized sender EOA(s) — the LMS relayer keys; only settable here when --owner is the deployer"
+    )
+    .requiredOption(
+      "--owner <address>",
+      "Owner set at construction — the address that may rotate authorized senders (the Admin Safe in production)"
+    )
+    .option("-r, --rpc-url <url>", "RPC URL (local anvil targets only)")
+    .action(async function (
+      this: Command,
+      opts: { currency?: string; sender?: string[]; owner: string; rpcUrl?: string }
+    ) {
+      const { name, chain, root, privateKey, account, deployerAddr } = this.optsWithGlobals() as GlobalOpts
+      if (!chain) throw new Error("--chain is required for deploy forwarder")
+
+      const deploymentName = `${chain}-${name}`
+      const config = getDeploymentConfig(deploymentName)
+      const currency = opts.currency ?? readOptionalContractAddress(root, config, "loans", "USDC") ?? config.usdc
+      if (!currency) throw new Error("--currency is required (or deploy loans first so USDC is in its manifest)")
+
+      const isLocal = config.chain === "foundry"
+      const explicitSigner =
+        this.getOptionValueSourceWithGlobals("privateKey") === "cli" ||
+        this.getOptionValueSourceWithGlobals("account") === "cli"
+      const useAnvilDefaults = isLocal && !explicitSigner
+      const resolvedDeployerAddr = useAnvilDefaults ? DEFAULT_ANVIL_ADDR : deployerAddr
+      if (!resolvedDeployerAddr) throw new Error("--deployer-addr or DEPLOYER_ADDR is required")
+
+      const initialOwner = checksum("--owner")(opts.owner)
+      const senders = opts.sender?.length ? resolveAuthorizedSenders(opts.sender) : []
+      assertSendersSettableAtDeploy({ initialOwner, deployer: resolvedDeployerAddr, senders })
+
+      process.env.DEPLOY_FORWARDER_CURRENCY = checksum("--currency")(currency)
+      process.env.DEPLOY_FORWARDER_INITIAL_OWNER = initialOwner
+      if (senders.length) process.env.DEPLOY_FORWARDER_SENDERS = senders.join(",")
+
+      await deploy({
+        preset: "forwarder",
+        root,
+        name: deploymentName,
+        rpcUrl: isLocal ? (opts.rpcUrl ?? process.env.ANVIL_RPC ?? DEFAULT_ANVIL_RPC) : opts.rpcUrl,
+        privateKey: useAnvilDefaults ? DEFAULT_ANVIL_KEY : privateKey,
+        account: useAnvilDefaults ? undefined : account,
+        deployerAddr: resolvedDeployerAddr,
+      })
+
+      // setup-smart-accounts reads `forwarder` from here, so record it rather than
+      // making the operator copy the address across by hand. Recording refuses to
+      // clobber a different address — use `manifest set forwarder` to replace one.
+      const deployed = readOptionalContractAddress(root, config, "forwarder", "Forwarder")
+      if (deployed) {
+        const { path } = writeRolesManifest(root, config, { forwarder: deployed })
+        console.log(`Recorded forwarder ${deployed} in ${path}`)
+      }
+    })
+
+  deployCmd
+    .command("cctp-bridge")
+    .description("Deploy the CctpBridgeModule custody module (Base mainnet only)")
+    .requiredOption("--safe <address>", "The intake Safe whose USDC the module bridges")
+    .requiredOption("--mint-recipient <address>", "Destination recipient (the Avalanche Funder), as an EVM address")
+    .action(async function (this: Command, opts: { safe: string; mintRecipient: string }) {
+      const { name, chain, root, privateKey, account, deployerAddr } = this.optsWithGlobals() as GlobalOpts
+      if (!chain) throw new Error("--chain is required for deploy cctp-bridge")
+      if (!deployerAddr) throw new Error("--deployer-addr or DEPLOYER_ADDR is required")
+      process.env.CCTP_BRIDGE_SAFE = checksum("--safe")(opts.safe)
+      process.env.CCTP_BRIDGE_MINT_RECIPIENT = checksum("--mint-recipient")(opts.mintRecipient)
+      await deploy({ preset: "cctp-bridge", root, name: `${chain}-${name}`, privateKey, account, deployerAddr })
     })
 }

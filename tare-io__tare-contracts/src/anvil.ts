@@ -38,7 +38,13 @@ export interface AnvilManifest {
   }
   /** Environment values consumers previously derived at deploy time. */
   env: {
-    HOT_PROXY_SAFE_ADDRESS: `0x${string}`
+    /** Nonce-free hot relay every onchain call goes through. */
+    FORWARDER_ADDRESS: `0x${string}`
+    /**
+     * The Forwarder's authorized sender (anvil account #0), which is also the payout
+     * destination every seeded smart account trusts.
+     */
+    FORWARDER_SENDER_ADDRESS: `0x${string}`
     TIMELOCK_ADDRESS: `0x${string}`
     ADMIN_SAFE_ADDRESS: `0x${string}`
     PROPOSER_SAFE_ADDRESS: `0x${string}`
@@ -70,5 +76,5 @@ export const version: string = manifest.version
 /** Dev smart-account addresses baked into the snapshot. */
 export const accounts: AnvilManifest["accounts"] = manifest.accounts
 
-/** Environment values for consumers (HotSafe address etc.). */
+/** Environment values for consumers (relay addresses etc.). */
 export const env: AnvilManifest["env"] = manifest.env

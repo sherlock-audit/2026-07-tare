@@ -20,7 +20,7 @@ export const ROLES_MANIFEST_ADDRESS_FIELDS = [
   "guardianSafe",
   "whitelisterSafe",
   "operationalManagementSafe",
-  "hotProxy",
+  "forwarder",
   "offramp",
   "originatorSa",
   "borrowerSa",

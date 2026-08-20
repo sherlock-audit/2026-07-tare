@@ -1,7 +1,7 @@
 import { assertAddressField, loadAndValidateManifest } from "../manifest.js"
 import { ROLES, type Role, type SetupManifest, type SmartAccounts } from "./types.js"
 
-const REQUIRED_SAFE_FIELDS = ["operationalManagementSafe", "hotProxy", "guardianSafe"] as const
+const REQUIRED_SAFE_FIELDS = ["operationalManagementSafe", "guardianSafe"] as const
 
 // Mapping from role to the corresponding manifest field name for that role's SA address. Used for validation and extraction.
 const SA_FIELD_BY_ROLE: Record<Role, keyof SetupManifest> = {
@@ -28,6 +28,9 @@ export function loadSetupManifest(path: string): SetupManifest {
     if (parsed.offramp !== undefined) {
       assertAddressField("offramp", parsed.offramp, errors)
     }
+    if (parsed.forwarder !== undefined) {
+      assertAddressField("forwarder", parsed.forwarder, errors)
+    }
 
     if (errors.length === 0) {
       const manifest = parsed as unknown as SetupManifest
@@ -45,7 +48,7 @@ export function loadSetupManifest(path: string): SetupManifest {
         }
       }
 
-      // Infrastructure Safes must be pairwise distinct (e.g. hotProxy == guardianSafe
+      // Infrastructure Safes must be pairwise distinct (e.g. opsMgmt == guardianSafe
       // would silently skip the second ownership step and leave SAs at threshold 1)
       const infraSafes = new Map<string, string>()
       for (const fieldName of REQUIRED_SAFE_FIELDS) {
@@ -72,7 +75,5 @@ export function loadSetupManifest(path: string): SetupManifest {
 
 /** Extract the role→address map of the eight smart accounts from a validated manifest. */
 export function smartAccountsFromManifest(manifest: SetupManifest): SmartAccounts {
-  return Object.fromEntries(
-    ROLES.map((role) => [role, manifest[SA_FIELD_BY_ROLE[role]] as string])
-  ) as SmartAccounts
+  return Object.fromEntries(ROLES.map((role) => [role, manifest[SA_FIELD_BY_ROLE[role]] as string])) as SmartAccounts
 }

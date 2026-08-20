@@ -64,7 +64,9 @@ struct LoanData {
 struct LoanTerms {
   /// @notice Loan origination date
   uint48 originationDate;
-  /// @notice Annual interest rate in basis points (500 = 5.00%), 30/360 day-count convention.
+  /// @notice Annual interest rate in basis points (500 = 5.00%). The day-count convention is
+  ///         per-loan, set off-chain by the servicer, and is not carried onchain — interest
+  ///         cannot be recomputed from this rate alone.
   uint32 interestRate;
   /// @notice Expected monthly payment amount (currency base units).
   int128 expectedMonthlyPayment;
@@ -163,6 +165,10 @@ interface ILoans {
   error AlreadyInitialized();
   /** @notice Thrown when an action is attempted on a loan whose NFT is currently locked. */
   error LoanLocked();
+  /** @notice Thrown when a `createLedgerEntries` batch would leave the investor's net interest or net principal payable negative. */
+  error InvestorNetNegative();
+  /** @notice Thrown when `servicerWithdraw` is attempted on a loan where a servicer fee bucket is negative (the servicer owes the loan). */
+  error ServicerOwesFunds();
 
   /** @notice Emitted when a new loan is created. */
   event LoanCreated(uint64 indexed loanId);
@@ -302,7 +308,7 @@ interface ILoans {
   function fund(uint64 loanId, int128 amount, uint48 timestamp, bytes32 ref) external returns (uint128 entryIndex);
 
   /**
-   * @notice Disburse funded capital to the borrower and lock in the loan's write-once terms.
+   * @notice Disburse funded capital to the borrower and set the loan's initial terms.
    * @dev Caller must be the loan's originator or admin/guardian. Loan must be `FullyFunded`.
    *      `netDisbursedAmount + originationFee` must equal the outstanding commitment.
    *      Withholds `originationFee` to `ACC_ORIGINATOR_FEE_PAYABLE`, transfers `netDisbursedAmount`
@@ -314,7 +320,8 @@ interface ILoans {
    * @param nextDueDate Initial next payment due date (0 leaves unchanged).
    * @param maturityDate Loan maturity date (0 leaves unchanged).
    * @param interestRate Annual interest rate in basis points.
-   * @param expectedMonthlyPayment Expected monthly payment (currency base units).
+   * @param expectedMonthlyPayment Expected monthly payment (currency base units). Must be
+   *        non-negative or the call reverts with `InvalidAmount`; `0` is permitted.
    * @param timestamp The off-chain disbursement timestamp recorded on the entries.
    * @param ref Caller-supplied external reference.
    * @return entryIndex The packed entry id of the borrower disbursement entry.
@@ -358,7 +365,9 @@ interface ILoans {
   /**
    * @notice Charge a miscellaneous fee against the borrower. Servicer or admin only.
    * @dev Records `ENTRY_MISC_FEE_CHARGE` transferring `amount` from
-   *      `ACC_SERVICER_MISC_FEE_PAYABLE` to `ACC_BORROWER_MISC_FEE_RECEIVABLE`.
+   *      `ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE` to `ACC_BORROWER_MISC_FEE_RECEIVABLE`.
+   *      The servicer payable is only recognized later, in `applyWaterfall`, once the
+   *      borrower pays the fee — so it is always cash-backed at withdrawal time.
    * @param loanId The loan identifier.
    * @param amount The fee amount (must be positive).
    * @param timestamp The off-chain charge timestamp recorded on the entry.
@@ -410,7 +419,8 @@ interface ILoans {
 
   /**
    * @notice Withdraw all servicer-owed cash (servicing fees and misc fees) for a batch of loans.
-   * @dev For each loan: caller must be the registered servicer or admin.
+   * @dev For each loan: caller must be the registered servicer or admin. Reverts with
+   *      `ServicerOwesFunds` if either fee bucket on any loan in the batch is negative.
    * @param loanIds The loan ids to withdraw from.
    * @param timestamp The off-chain timestamp recorded on each withdrawal entry.
    * @param ref Caller-supplied external reference.
@@ -493,13 +503,16 @@ interface ILoans {
 
   /**
    * @notice Update the loan terms set during `disburse`. Servicer or admin only.
-   * @dev Loan must not be in a terminal status. `0` for any field is a sentinel meaning "no change",
-   *      so `expectedMonthlyPayment` cannot be set to exactly `0` through this function.
+   * @dev Loan must not be in a terminal status. Only `originationDate` carries a "no change"
+   *      sentinel, because a date can never legitimately be `0`. `interestRate` and
+   *      `expectedMonthlyPayment` are always applied, so callers must supply the intended value
+   *      for both on every call — `0` is a meaningful value for each and is stored as such.
    *      Emits `LoanTermsSet` with the resulting stored values.
    * @param loanId The loan identifier.
    * @param originationDate The origination date (0 = no change).
-   * @param interestRate Annual interest rate in basis points (0 = no change).
-   * @param expectedMonthlyPayment Expected monthly payment in currency base units (0 = no change).
+   * @param interestRate Annual interest rate in basis points. Always applied.
+   * @param expectedMonthlyPayment Expected monthly payment in currency base units. Always applied;
+   *        must be non-negative or the call reverts with `InvalidAmount`.
    */
   function updateLoanTerms(
     uint64 loanId,
@@ -511,7 +524,9 @@ interface ILoans {
   /**
    * @notice Record one or more raw ledger entries against `loanId`. Servicer or Admin/Guardian only.
    * @dev Escape hatch for manual corrections. Each entry is validated against the standard
-   *      account rules but bypasses higher-level lifecycle constraints.
+   *      account rules but bypasses higher-level lifecycle constraints. Reverts with
+   *      `InvestorNetNegative` if the batch ends with a negative investor net interest or
+   *      net principal payable (transient in-batch negatives are allowed).
    * @param loanId The loan identifier.
    * @param timestamp The off-chain timestamp recorded on every entry in the batch.
    * @param ledgerEntries The raw entries to write.

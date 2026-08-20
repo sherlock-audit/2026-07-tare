@@ -106,10 +106,10 @@ Each address is verified at the appropriate step. Checks are either **explicit**
 
 | Function               | `owner`                      | `controller` | `receiver`                   | Rationale                                                                                  |
 | ---------------------- | ---------------------------- | ------------ | ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `requestDeposit`       | ✅ explicit                  | —            | —                            | Assets come from owner; must be verified. Controller deferred to claim time.               |
+| `requestDeposit`       | ✅ explicit                  | ✅ explicit  | —                            | Assets come from owner; must be verified. Controller must be a verified investor (explicit check).           |
 | `deposit` / `mint`     | —                            | ✅ explicit  | ✅ implicit (share transfer) | Controller directs the claim. Receiver enforced by share token `_update`.                  |
 | `cancelDepositRequest` | —                            | ✅ explicit  | ✅ explicit                  | Controller authorizes cancellation. Receiver must be a verified investor (explicit check). |
-| `requestRedeem`        | ✅ implicit (share transfer) | —            | —                            | Owner proven via `safeTransferFrom`. Controller deferred to claim time.                    |
+| `requestRedeem`        | ✅ implicit (share transfer) | ✅ explicit  | —                            | Owner proven via `safeTransferFrom`. Controller must be a verified investor (explicit check).                |
 | `redeem` / `withdraw`  | —                            | ✅ explicit  | ✅ explicit                  | No share transfer at claim — receiver gets assets. Both must be explicitly checked.        |
 | `cancelRedeemRequest`  | —                            | ✅ explicit  | ✅ implicit (share transfer) | Controller authorizes cancellation. Receiver gets shares back via share token transfer.    |
 
@@ -1239,7 +1239,7 @@ This makes the seed amount a deliberate parameter, not an arbitrary donation:
 - A **too-small** seed makes each share worth a sub-wei amount, so fractional share balances round to `0` on redemption (`convertToAssets` / `approveRedemption`).
 - A **too-large** seed raises the minimum approvable deposit — `approveDeposit` reverts via `require(shares > 0)` for any amount below `⌈bootstrapNav / DEAD_SHARES⌉` asset base units.
 
-With `DEAD_SHARES = 1e18`, 6-decimal USDC, and 18-decimal shares, seeding exactly `1e6` (1 USDC) yields the clean `1 USDC → 1 whole share` starting price (`1e18 / 1e6 = 1e12` shares per base unit). The deployment runbook mandates this seed; see [production_deployment_runbook.md §7.7](deployment/production_deployment_runbook.md#7-7-seed-vault).
+With `DEAD_SHARES = 1e18`, 6-decimal USDC, and 18-decimal shares, seeding exactly `1e6` (1 USDC) yields the clean `1 USDC → 1 whole share` starting price (`1e18 / 1e6 = 1e12` shares per base unit). The deployment runbook mandates this seed; see [production_deployment_runbook.md §7.8](deployment/production_deployment_runbook.md#7-7-seed-vault).
 
 ---
 

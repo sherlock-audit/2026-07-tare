@@ -29,8 +29,8 @@ fs_permissions = [{ access = "read-write", path = "./deployments/base_sepolia/*"
 
 [etherscan]
 43114 = { key = "${ETHERSCAN_API_KEY}", chain = 43114 }
+8453 = { key = "${ETHERSCAN_API_KEY}", chain = 8453 }
 # 84532 = { key = "${ETHERSCAN_API_KEY}" }
-# 8453 = { key = "${ETHERSCAN_API_KEY}" }
 # 43113 = { key = "${ETHERSCAN_API_KEY}" }
 # sepolia = { key = "${ETHERSCAN_API_KEY}" }
 

@@ -19,7 +19,6 @@ const SA_FIELDS = [
 
 const SAFE_FIELD_BY_OPTION = {
   opsMgmtSafe: "operationalManagementSafe",
-  hotProxy: "hotProxy",
   guardianSafe: "guardianSafe",
   proposerSafe: "proposerSafe",
   whitelisterSafe: "whitelisterSafe",
@@ -27,7 +26,6 @@ const SAFE_FIELD_BY_OPTION = {
 
 interface Opts {
   opsMgmtSafe?: string
-  hotProxy?: string
   guardianSafe?: string
   proposerSafe?: string
   whitelisterSafe?: string
@@ -84,7 +82,6 @@ export function registerCreateRoleAccounts(program: Command): void {
       "Create all eight role smart accounts via SmartAccountFactory and record them in the roles manifest (idempotent: roles already in the manifest are skipped)."
     )
     .option("--ops-mgmt-safe <address>", "Operational Management Safe (default: roles manifest)")
-    .option("--hot-proxy <address>", "Hot-Proxy Safe (default: roles manifest)")
     .option("--guardian-safe <address>", "Multisig co-owner added during setup (default: roles manifest)")
     .option("--proposer-safe <address>", "Timelock proposer Safe (default: roles manifest)")
     .option("--whitelister-safe <address>", "Whitelister Safe (default: roles manifest)")

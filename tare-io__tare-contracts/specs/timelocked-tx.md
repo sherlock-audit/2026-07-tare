@@ -97,6 +97,15 @@ Functions protected by `onlyRole(GUARDIAN_ROLE)` can only be called by the guard
 | `grantRole(GUARDIAN_ROLE, addr)`  | `GUARDIAN_ROLE` (role admin) | Granting guardian rights is itself a critical operation                               |
 | `revokeRole(GUARDIAN_ROLE, addr)` | `GUARDIAN_ROLE` (role admin) | Removing a guardian is a critical operation that only another guardian should perform |
 
+### LoansNFT
+
+Roles are resolved against the `Loans` contract (`LoansNFT` stores no roles of its own), so guardian calls go through the same timelock.
+
+| Function                                    | Modifier                     | Why Timelocked                                                              |
+| ------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| `unpause()`                                 | guardian (via `Loans` roles) | Resuming NFT transfers after an emergency should be deliberate               |
+| `forceTransfer(address, address, uint256)`  | guardian (via `Loans` roles) | Bypasses ERC721 approvals — ownership reassignment is a critical operation   |
+
 ### TrustedSpender
 
 | Function                          | Modifier                     | Why Timelocked                                                                        |
@@ -140,6 +149,13 @@ The admin role retains immediate access to operational and emergency functions. 
 | ------------------------------ | ---------------------------- | ------------------------------------------- |
 | `setMaxLoansPerOffer(uint64)`  | `onlyAdminOrGuardian`        | Configuration change for offer limits       |
 | `revokeRole(ADMIN_ROLE, addr)` | `GUARDIAN_ROLE` (role admin) | Revoking admin rights — guardian-controlled |
+
+### LoansNFT
+
+| Function                 | Modifier                                     | Rationale                       |
+| ------------------------ | -------------------------------------------- | -------------------------------- |
+| `pause()`                | admin, guardian, or pauser (via `Loans` roles) | Emergency pause must be instant |
+| `setBaseURI(string)`     | admin (via `Loans` roles)                    | Operational metadata change      |
 
 ### TrustedSpender
 

@@ -45,6 +45,12 @@ export function runGenerateDeployments(root: string): void {
     const loans: DeploymentJson = JSON.parse(readFileSync(loansPath, "utf8"))
     const accounts: DeploymentJson = JSON.parse(readFileSync(accountsPath, "utf8"))
     const vault: DeploymentJson = JSON.parse(readFileSync(vaultPath, "utf8"))
+    // Only DeployLocal bakes the Forwarder into the accounts component; a standalone
+    // `deploy forwarder` writes its own, which wins where both exist.
+    const forwarderPath = join(deploymentsDir, config.chain, config.shortName, "forwarder", "latest.json")
+    const forwarder: DeploymentJson | null = existsSync(forwarderPath)
+      ? JSON.parse(readFileSync(forwarderPath, "utf8"))
+      : null
     const shortName = `${name}-latest`
     const startBlock = Math.min(loans.blockNumber, accounts.blockNumber, vault.blockNumber)
 
@@ -77,7 +83,7 @@ export function runGenerateDeployments(root: string): void {
       MultiSendCallOnly: '${accounts.contracts.MultiSendCallOnly}',
       TrustedSpender: '${accounts.contracts.TrustedSpender}',
       TrustedCalls: '${accounts.contracts.TrustedCalls}',
-      HotSafe: ${addr(loans.contracts.HotSafe)},
+      Forwarder: ${addr(forwarder?.contracts.Forwarder ?? accounts.contracts.Forwarder)},
       PortfolioVault: '${vault.contracts.PortfolioVault}',
       NavCalculator: '${vault.contracts.NavCalculator}',
       VaultShareToken: '${vault.contracts.VaultShareToken}',
@@ -123,7 +129,7 @@ export type Deployment = {
     MultiSendCallOnly: \`0x\${string}\`;
     TrustedSpender: \`0x\${string}\`;
     TrustedCalls: \`0x\${string}\`;
-    HotSafe: \`0x\${string}\` | null;
+    Forwarder: \`0x\${string}\` | null;
     PortfolioVault: \`0x\${string}\`;
     NavCalculator: \`0x\${string}\`;
     VaultShareToken: \`0x\${string}\`;

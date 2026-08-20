@@ -97,6 +97,8 @@ abstract contract GuardianAccessControl is AccessControl, Pausable, IGuardianAcc
 
   /// @dev Tracks the guardian count so revocations can enforce the at-least-one-guardian invariant.
   function _grantRole(bytes32 role, address account) internal virtual override returns (bool granted) {
+    if (role == GUARDIAN_ROLE && account == address(0)) revert InvalidGuardian();
+
     granted = super._grantRole(role, account);
     if (granted && role == GUARDIAN_ROLE) guardianCount++;
   }

@@ -4,7 +4,7 @@ pragma solidity 0.8.33;
 import {LoansTestBase} from "../../setup/LoansTestBase.t.sol";
 import {Entry, ILoans, LoanStatus} from "contracts/interfaces/ILoans.sol";
 import {ENTRY_MISC_FEE_CHARGE} from "contracts/interfaces/LedgerEntries.sol";
-import {ACC_SERVICER_MISC_FEE_PAYABLE, ACC_BORROWER_MISC_FEE_RECEIVABLE} from "contracts/interfaces/Accounts.sol";
+import {ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE, ACC_BORROWER_MISC_FEE_RECEIVABLE} from "contracts/interfaces/Accounts.sol";
 import {MIN_USDC_AMOUNT, MAX_USDC_AMOUNT} from "test/lib/Constants.sol";
 
 /// @notice Unit tests for Loans.chargeMiscFee()
@@ -26,11 +26,11 @@ contract Loans_ChargeMiscFeeTest is LoansTestBase {
     uint64 entryNumber = loans.entryCount(loanId);
     Entry memory entry = loans.getLoanEntry(loanId, entryNumber);
     assertEq(entry.amount, feeAmount);
-    assertEq(uint8(entry.from), ACC_SERVICER_MISC_FEE_PAYABLE);
+    assertEq(uint8(entry.from), ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE);
     assertEq(uint8(entry.to), ACC_BORROWER_MISC_FEE_RECEIVABLE);
     assertEq(entry.entryType, ENTRY_MISC_FEE_CHARGE);
 
-    assertEq(loans.getLoanAccountBalance(loanId, ACC_SERVICER_MISC_FEE_PAYABLE), -feeAmount);
+    assertEq(loans.getLoanAccountBalance(loanId, ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE), -feeAmount);
     assertEq(loans.getLoanAccountBalance(loanId, ACC_BORROWER_MISC_FEE_RECEIVABLE), feeAmount);
   }
 

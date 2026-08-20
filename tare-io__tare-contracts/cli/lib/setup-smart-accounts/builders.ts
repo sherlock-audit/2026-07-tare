@@ -17,31 +17,32 @@ import { MAX_UINT208, MAX_UINT256, NO_EXPIRY } from "../constants.js"
 import type { Role, SetupContext, StepDef } from "./types.js"
 
 /**
- * Common steps for every SA: hot-proxy delegation on both modules, TrustedCalls
+ * Common steps for every SA: Forwarder delegation on both modules, TrustedCalls
  * module activation, and the TrustedSpender USDC approval. In production these
- * should all report `skipped` because `SmartAccountFactory.configureSmartAccount`
- * performed them at SA creation; they remain as idempotent fallbacks for SAs
- * created before the current factory version.
+ * should all report `skipped` because
+ * `SmartAccountFactory.configureSmartAccount` performed them at SA creation;
+ * they remain as idempotent fallbacks for SAs created before the current
+ * factory version.
  */
 export function buildCommonSteps(role: Role, ctx: SetupContext): StepDef[] {
-  const { trustedCalls, trustedSpender, usdc, hotProxy, deployment } = ctx
+  const { trustedCalls, trustedSpender, usdc, forwarder, deployment } = ctx
   const smartAccount = ctx.smartAccounts[role]
   return [
     {
-      name: `TrustedCalls.addDelegate(${role}, hotProxy)`,
-      category: "hotProxyDelegation",
-      check: () => isDelegate(trustedCalls, smartAccount, hotProxy, deployment),
+      name: `TrustedCalls.addDelegate(${role}, forwarder)`,
+      category: "relayDelegation",
+      check: () => isDelegate(trustedCalls, smartAccount, forwarder, deployment),
       execute: () => {
-        const data = castCalldata("addDelegate(address,address)", [smartAccount, hotProxy])
+        const data = castCalldata("addDelegate(address,address)", [smartAccount, forwarder])
         return saExec(smartAccount, trustedCalls, data, ctx)
       },
     },
     {
-      name: `TrustedSpender.addDelegate(${role}, hotProxy)`,
-      category: "hotProxyDelegation",
-      check: () => isDelegate(trustedSpender, smartAccount, hotProxy, deployment),
+      name: `TrustedSpender.addDelegate(${role}, forwarder)`,
+      category: "relayDelegation",
+      check: () => isDelegate(trustedSpender, smartAccount, forwarder, deployment),
       execute: () => {
-        const data = castCalldata("addDelegate(address,address)", [smartAccount, hotProxy])
+        const data = castCalldata("addDelegate(address,address)", [smartAccount, forwarder])
         return saExec(smartAccount, trustedSpender, data, ctx)
       },
     },
@@ -122,8 +123,8 @@ export function buildInvestorNftApprovalStep(ctx: SetupContext): StepDef {
  * Investor-only: register the PortfolioVault as Investor in the investor SA's
  * own address book, satisfying the seller-side checks in
  * `LoansExchange.createOffer` and `acceptOffer` when selling loans to the
- * vault. The buyer-side entry (vault's book) is an admin/guardian operation
- * handled outside this command.
+ * vault. The buyer-side entry (vault's book) is guardian-routed and lands in
+ * the `grant-roles` Timelock batch.
  */
 export function buildInvestorExchangeRegistrationStep(ctx: SetupContext): StepDef {
   const { loans, portfolioVault, deployment } = ctx
@@ -141,11 +142,10 @@ export function buildInvestorExchangeRegistrationStep(ctx: SetupContext): StepDe
 
 /**
  * Shareholder-only vault wiring. All three are on the never-whitelist list for
- * TrustedCalls, so they must land here — they cannot be retrofitted via the
- * hot-proxy.
+ * TrustedCalls, so they must land here — no relay can retrofit them later.
  */
 export function buildShareholderSteps(ctx: SetupContext): StepDef[] {
-  const { usdc, vaultShareToken, portfolioVault, hotProxy, deployment } = ctx
+  const { usdc, vaultShareToken, portfolioVault, forwarder, deployment } = ctx
   const shareholderSa = ctx.smartAccounts.shareholder
   return [
     {
@@ -167,11 +167,11 @@ export function buildShareholderSteps(ctx: SetupContext): StepDef[] {
       },
     },
     {
-      name: "PortfolioVault.setOperator(hotProxy, true) from shareholder",
+      name: "PortfolioVault.setOperator(forwarder, true) from shareholder",
       category: "vaultWiring",
-      check: () => isOperator(portfolioVault, shareholderSa, hotProxy, deployment),
+      check: () => isOperator(portfolioVault, shareholderSa, forwarder, deployment),
       execute: () => {
-        const data = castCalldata("setOperator(address,bool)", [hotProxy, "true"])
+        const data = castCalldata("setOperator(address,bool)", [forwarder, "true"])
         return saExec(shareholderSa, portfolioVault, data, ctx)
       },
     },
@@ -205,21 +205,25 @@ export function buildOriginatorRegistrationSteps(ctx: SetupContext): StepDef[] {
 }
 
 /**
- * Final ownership transition: add the Hot-Proxy Safe (threshold stays 1 so the
+ * Final ownership transition: add the Forwarder (threshold stays 1 so the
  * second call can still execute under the ops safe's single approval), then add
  * the Guardian Safe and raise the threshold to its final value
  * (`ctx.finalThreshold`: 2 in production, 1 for local dev).
+ *
+ * The slot is what lets an authorized sender confirm a Safe transaction with a
+ * `v = 1` pre-validated signature. At `finalThreshold > 1` it is one of the
+ * required signatures, not sufficient on its own.
  */
 export function buildOwnershipTransitionSteps(role: Role, ctx: SetupContext): StepDef[] {
-  const { hotProxy, guardianSafe, finalThreshold, deployment } = ctx
+  const { forwarder, guardianSafe, finalThreshold, deployment } = ctx
   const smartAccount = ctx.smartAccounts[role]
   return [
     {
-      name: `${role}.addOwnerWithThreshold(hotProxy, 1)`,
+      name: `${role}.addOwnerWithThreshold(forwarder, 1)`,
       category: "ownership",
-      check: () => isOwner(smartAccount, hotProxy, deployment),
+      check: () => isOwner(smartAccount, forwarder, deployment),
       execute: () => {
-        const data = castCalldata("addOwnerWithThreshold(address,uint256)", [hotProxy, "1"])
+        const data = castCalldata("addOwnerWithThreshold(address,uint256)", [forwarder, "1"])
         return saExec(smartAccount, smartAccount, data, ctx)
       },
     },

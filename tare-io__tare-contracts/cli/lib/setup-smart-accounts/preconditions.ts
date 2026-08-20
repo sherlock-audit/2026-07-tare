@@ -19,8 +19,8 @@ export function assertPreconditions(ctx: SetupContext): void {
     if (!isOwner(smartAccount, ctx.operationalManagementSafe, deployment)) {
       errors.push(`${role}: operationalManagementSafe is not an owner`)
     }
-    if (isOwner(smartAccount, ctx.hotProxy, deployment)) {
-      errors.push(`${role}: hotProxy is already an owner`)
+    if (isOwner(smartAccount, ctx.forwarder, deployment)) {
+      errors.push(`${role}: forwarder is already an owner`)
     }
     if (isOwner(smartAccount, ctx.guardianSafe, deployment)) {
       errors.push(`${role}: guardianSafe is already an owner`)
@@ -38,8 +38,8 @@ export function assertPreconditions(ctx: SetupContext): void {
   if (!isZero(erc20Allowance(ctx.vaultShareToken, shareholderSa, ctx.portfolioVault, deployment))) {
     errors.push("shareholder: VaultShareToken allowance to PortfolioVault is not 0")
   }
-  if (isOperator(ctx.portfolioVault, shareholderSa, ctx.hotProxy, deployment)) {
-    errors.push("shareholder: hotProxy is already a PortfolioVault operator")
+  if (isOperator(ctx.portfolioVault, shareholderSa, ctx.forwarder, deployment)) {
+    errors.push("shareholder: forwarder is already a PortfolioVault operator")
   }
 
   if (isApprovedForAll(ctx.loansNft, ctx.smartAccounts.investor, ctx.loansExchange, deployment)) {

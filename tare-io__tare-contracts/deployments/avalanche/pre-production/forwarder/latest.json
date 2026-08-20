@@ -1,0 +1,13 @@
+{
+  "blockNumber": 93194926,
+  "chain": "avalanche",
+  "chainId": 43114,
+  "commitHash": "4092336",
+  "component": "forwarder",
+  "contracts": {
+    "Forwarder": "0x0D5b08b8901f3394C390250b4924735039b27157"
+  },
+  "deploymentName": "pre-production",
+  "timestamp": 1787155435,
+  "version": "0.5.36"
+}

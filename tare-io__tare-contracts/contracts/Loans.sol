@@ -36,6 +36,7 @@ import {
   ENTRY_INVESTOR_PRINCIPAL_WITHDRAWAL,
   ENTRY_MISC_FEE_CHARGE,
   ENTRY_MISC_FEE_DEBT_CLEARANCE,
+  ENTRY_MISC_FEE_ALLOCATION,
   ENTRY_MISC_FEE_WITHDRAWAL,
   ENTRY_ORIGINATOR_FEE_WITHDRAWAL
 } from "contracts/interfaces/LedgerEntries.sol";
@@ -60,6 +61,7 @@ import {
   ACC_SERVICER_MISC_FEE_PAID,
   ACC_SERVICER_MISC_FEE_PAYABLE,
   ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE,
+  ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE,
   ACC_UNFUNDED_COMMITMENT
 } from "contracts/interfaces/Accounts.sol";
 
@@ -245,7 +247,8 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
   /**
    * @dev Updates mutable loan-data fields. Pass `DoesNotExist` as `status` or 0 as a date
    *      to leave that field unchanged. Emits `LoanStatusUpdated`, `LoanNextDueDateUpdated`,
-   *      and `LoanMaturityDateUpdated` for each field that actually changed.
+   *      and `LoanMaturityDateUpdated` for each field supplied as a non-sentinel, including
+   *      when the supplied value equals the stored one.
    */
   function _updateLoanData(uint64 loanId, LoanStatus status, uint48 nextDueDate, uint48 maturityDate) internal {
     LoanData storage loanData = data[loanId];
@@ -278,12 +281,15 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     uint32 interestRate,
     int128 expectedMonthlyPayment
   ) external whenNotPaused onlyServicerOrAdmin(loanId) loanExists(loanId) notTerminal(loanId) {
+    require(expectedMonthlyPayment >= 0, InvalidAmount());
+
     LoanTerms storage terms = loanTerms[loanId];
 
-    // 0 is a sentinel meaning "no change" for each field.
+    // Only update the origination date if a non-zero, positive value is provided.
+    // The two other fields are always overwritten, so they must be restated to preserve their values if unchanged.
     if (originationDate > 0) terms.originationDate = originationDate;
-    if (interestRate > 0) terms.interestRate = interestRate;
-    if (expectedMonthlyPayment > 0) terms.expectedMonthlyPayment = expectedMonthlyPayment;
+    terms.interestRate = interestRate;
+    terms.expectedMonthlyPayment = expectedMonthlyPayment;
 
     data[loanId].updatedAt = uint48(block.timestamp);
 
@@ -335,8 +341,11 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
 
       LoanData storage loanData = data[loanId];
       results[i] = LoanValue({
-        outstandingInvestorPrincipal: -_getAccountBalance(loanId, ACC_INVESTOR_PRINCIPAL_PAYABLE) -
-          _getAccountBalance(loanId, ACC_INVESTOR_PRINCIPAL_REPAID),
+        outstandingInvestorPrincipal: _getNetPayable(
+          loanId,
+          ACC_INVESTOR_PRINCIPAL_PAYABLE,
+          ACC_INVESTOR_PRINCIPAL_REPAID
+        ),
         investorPrincipalWithdrawable: _getNetPrincipalPayableToInvestor(loanId),
         investorInterestWithdrawable: _getNetInterestPayableToInvestor(loanId),
         status: loanData.status,
@@ -385,7 +394,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
 
     _createInternalEntry(
       loanId,
-      ACC_SERVICER_MISC_FEE_PAYABLE,
+      ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE,
       ACC_BORROWER_MISC_FEE_RECEIVABLE,
       amount,
       timestamp,
@@ -467,7 +476,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     );
 
     // Transfer netDisbursedAmount to borrower
-    currency.safeTransfer(borrowers[loanId], uint256(int256(netDisbursedAmount)));
+    _payOut(borrowers[loanId], netDisbursedAmount);
   }
 
   /**
@@ -498,6 +507,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     _requireCallerOrAdmin(originators[loanId]);
     require(netDisbursedAmount > 0, InvalidAmount());
     require(originationFee >= 0, InvalidAmount());
+    require(expectedMonthlyPayment >= 0, InvalidAmount());
 
     LoanData storage loanData = data[loanId];
     require(loanData.status == LoanStatus.FullyFunded, InvalidStatus());
@@ -557,14 +567,6 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     uint48 timestamp,
     bytes32 ref
   ) private {
-    int128 totalInterestAndFees = servicingFees + investorInterest;
-    if (totalInterestAndFees == 0) return;
-
-    int128 interestPaid = _getAccountBalance(loanId, ACC_BORROWER_INTEREST_PAID);
-    int128 outstanding = _getAccountBalance(loanId, ACC_BORROWER_INTEREST_RECEIVABLE) +
-      (interestPaid < 0 ? interestPaid : int128(0));
-    require(totalInterestAndFees <= outstanding, InvalidAmount());
-
     if (servicingFees > 0) {
       _createInternalEntry(
         loanId,
@@ -587,11 +589,12 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
         ref
       );
     }
-    _createInternalEntry(
+    // `_clearReceivableDebt` returns early when the total is 0 and caps it at the outstanding receivable.
+    _clearReceivableDebt(
       loanId,
       ACC_BORROWER_INTEREST_PAID,
-      ACC_BORROWER_PAYMENT_CLEARING,
-      totalInterestAndFees,
+      ACC_BORROWER_INTEREST_RECEIVABLE,
+      servicingFees + investorInterest,
       timestamp,
       ENTRY_BORROWER_INTEREST_DEBT_CLEARANCE,
       ref
@@ -628,6 +631,19 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
       InvalidAmount()
     );
 
+    // Misc fee: promote the collected portion to the withdrawable servicer payable, then clear
+    // the borrower receivable. `_clearReceivableDebt` caps `miscFees` at the outstanding receivable.
+    if (miscFees > 0) {
+      _createInternalEntry(
+        loanId,
+        ACC_SERVICER_MISC_FEE_PAYABLE,
+        ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE,
+        miscFees,
+        timestamp,
+        ENTRY_MISC_FEE_ALLOCATION,
+        ref
+      );
+    }
     _clearReceivableDebt(
       loanId,
       ACC_BORROWER_MISC_FEE_PAID,
@@ -656,7 +672,10 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
    * @dev All loans must share the same servicer address (caller or admin acting on
    *      their behalf). Per-loan ledger entries are written individually but the
    *      payouts are consolidated into a single ERC20 transfer. Automatically
-   *      withdraws all available servicing fees and misc fees per loan.
+   *      withdraws all available servicing fees and misc fees per loan. Reverts with
+   *      `ServicerOwesFunds` when either fee bucket is negative: a servicer owing the
+   *      loan must settle first (`returnFunds`, a reclassification entry, or the next
+   *      waterfall allocation) before withdrawing.
    */
   function servicerWithdraw(
     uint64[] calldata loanIds,
@@ -673,12 +692,14 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     for (uint256 i = 0; i < numLoans; ++i) {
       uint64 loanId = loanIds[i];
 
-      require(loanId != 0 && loanId <= currentLoanCount, DoesNotExist());
+      _checkLoanId(loanId, currentLoanCount);
 
       servicerAddress = _requireBatchCaller(servicers[loanId], i, servicerAddress);
 
       int128 servicingFee = _getNetPayable(loanId, ACC_SERVICER_FEE_PAYABLE, ACC_SERVICER_FEE_PAID);
       int128 miscFee = _getNetPayable(loanId, ACC_SERVICER_MISC_FEE_PAYABLE, ACC_SERVICER_MISC_FEE_PAID);
+
+      require(servicingFee >= 0 && miscFee >= 0, ServicerOwesFunds());
 
       totalTransfer += _withdrawToAccount(
         loanId,
@@ -702,7 +723,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
       data[loanId].updatedAt = timestamp;
     }
 
-    currency.safeTransfer(servicerAddress, uint256(int256(totalTransfer)));
+    _payOut(servicerAddress, totalTransfer);
   }
 
   /**
@@ -737,7 +758,15 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     return _deposit(loanId, from, amount, msg.sender, timestamp, entryType, ref);
   }
 
-  /// @inheritdoc ILoans
+  /**
+   * @inheritdoc ILoans
+   * @dev Validated at batch end (not per entry) so complete correction recipes may pass
+   *      through transient negatives: reverts with `InvestorNetNegative` if the batch
+   *      leaves the investor's net interest or net principal payable below zero. Such
+   *      states are uncollectible (cash is never clawed back from the investor) and are
+   *      therefore unrepresentable; corrections must book the delta through
+   *      `ACC_SERVICER_ADJUSTMENT` instead.
+   */
   function createLedgerEntries(
     uint64 loanId,
     uint48 timestamp,
@@ -758,6 +787,11 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
       require(e.from != ACC_CASH && e.to != ACC_CASH, InvalidAccount());
       entryIndices[i] = _createInternalEntry(loanId, e.from, e.to, e.amount, timestamp, e.entryType, e.ref);
     }
+
+    require(
+      _getNetInterestPayableToInvestor(loanId) >= 0 && _getNetPrincipalPayableToInvestor(loanId) >= 0,
+      InvestorNetNegative()
+    );
   }
 
   /// @inheritdoc ILoans
@@ -818,7 +852,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     for (uint256 i = 0; i < numLoans; ++i) {
       uint64 loanId = loanIds[i];
 
-      require(loanId != 0 && loanId <= currentLoanCount, DoesNotExist());
+      _checkLoanId(loanId, currentLoanCount);
 
       originatorAddress = _requireBatchCaller(originators[loanId], i, originatorAddress);
 
@@ -838,7 +872,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
       data[loanId].updatedAt = timestamp;
     }
 
-    currency.safeTransfer(originatorAddress, uint256(int256(totalTransfer)));
+    _payOut(originatorAddress, totalTransfer);
   }
 
   /**
@@ -864,7 +898,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
     // Handle the first loan outside the loop so the investor/unlocker check
     // and caller authorization only happen once.
     uint64 firstLoanId = loanIds[0];
-    require(firstLoanId != 0 && firstLoanId <= currentLoanCount, DoesNotExist());
+    _checkLoanId(firstLoanId, currentLoanCount);
 
     (address cachedInvestorAddress, address cachedUnlocker) = nft.ownerAndUnlocker(uint256(firstLoanId));
     address recipient;
@@ -880,7 +914,7 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
 
     for (uint256 i = 1; i < numLoans; ) {
       uint64 loanId = loanIds[i];
-      require(loanId != 0 && loanId <= currentLoanCount, DoesNotExist());
+      _checkLoanId(loanId, currentLoanCount);
       (address loanInvestor, address loanUnlocker) = nft.ownerAndUnlocker(uint256(loanId));
       require(loanInvestor == cachedInvestorAddress, Unauthorized());
       require(loanUnlocker == cachedUnlocker, Unauthorized());
@@ -892,14 +926,16 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
       }
     }
 
-    currency.safeTransfer(recipient, uint256(int256(totalTransfer)));
+    _payOut(recipient, totalTransfer);
   }
 
   /**
    * @dev Per-loan helper used by `investorWithdraw`. Writes the per-loan result
    *      directly into the caller's `results` array slot to avoid an extra
    *      memory struct allocation and copy. Returns the amount to add to the
-   *      caller's running transfer total.
+   *      caller's running transfer total. Both nets are guaranteed non-negative:
+   *      standard flows cannot produce negatives and `createLedgerEntries`
+   *      rejects batches that would.
    */
   function _processInvestorWithdrawal(
     uint64 loanId,
@@ -984,5 +1020,13 @@ contract Loans is LoansLedger, Rescuable, ReentrancyGuardTransient {
   function _requireBatchCaller(address roleAddr, uint256 index, address canonical) private view returns (address) {
     index == 0 ? _requireCallerOrAdmin(roleAddr) : require(roleAddr == canonical, Unauthorized());
     return roleAddr;
+  }
+
+  function _checkLoanId(uint64 loanId, uint64 currentLoanCount) private pure {
+    require(loanId != 0 && loanId <= currentLoanCount, DoesNotExist());
+  }
+
+  function _payOut(address to, int128 amount) private {
+    currency.safeTransfer(to, uint256(int256(amount)));
   }
 }

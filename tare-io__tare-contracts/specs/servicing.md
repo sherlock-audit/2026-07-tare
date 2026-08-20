@@ -25,11 +25,12 @@ This table summarizes the ledger transfers created by each Loans function. Multi
 | :--- | :--- | :--- |
 | `create` | `ACC_UNFUNDED_COMMITMENT -> ACC_BORROWER_PRINCIPAL_RECEIVABLE` | `ENTRY_LOAN_COMMITMENT` |
 | `accrue` | `ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE -> ACC_BORROWER_INTEREST_RECEIVABLE` | `ENTRY_INTEREST_ACCRUAL` |
-| `chargeMiscFee` | `ACC_SERVICER_MISC_FEE_PAYABLE -> ACC_BORROWER_MISC_FEE_RECEIVABLE` | `ENTRY_MISC_FEE_CHARGE` |
+| `chargeMiscFee` | `ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE -> ACC_BORROWER_MISC_FEE_RECEIVABLE` | `ENTRY_MISC_FEE_CHARGE` |
 | `fund` | `ACC_INVESTOR_PRINCIPAL_PAYABLE -> ACC_CASH` | `ENTRY_INVESTOR_CAPITAL_RECEIVED` |
 | `disburse` (origination fee withholding, if `originationFee > 0`) | `ACC_ORIGINATOR_FEE_PAYABLE -> ACC_UNFUNDED_COMMITMENT` | `ENTRY_ORIGINATOR_FEE_WITHHOLDING` |
 | `disburse` (borrower disbursement) | `ACC_CASH -> ACC_UNFUNDED_COMMITMENT` | `ENTRY_DISBURSEMENT_TO_BORROWER` |
 | `pay` | `ACC_BORROWER_PAYMENT_CLEARING -> ACC_CASH` | `ENTRY_BORROWER_PAYMENT` |
+| `applyWaterfall` (misc fee allocation, if `miscFees > 0`) | `ACC_SERVICER_MISC_FEE_PAYABLE -> ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE` | `ENTRY_MISC_FEE_ALLOCATION` |
 | `applyWaterfall` (misc fee debt clearance, if `miscFees > 0`) | `ACC_BORROWER_MISC_FEE_PAID -> ACC_BORROWER_PAYMENT_CLEARING` | `ENTRY_MISC_FEE_DEBT_CLEARANCE` |
 | `applyWaterfall` (servicer fee allocation, if `servicingFees > 0`) | `ACC_SERVICER_FEE_PAYABLE -> ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE` | `ENTRY_SERVICER_FEE_ALLOCATION` |
 | `applyWaterfall` (investor interest allocation, if `investorInterest > 0`) | `ACC_INVESTOR_INTEREST_PAYABLE -> ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE` | `ENTRY_INVESTOR_INTEREST_ALLOCATION` |
@@ -60,8 +61,10 @@ We track the following attributes for loans; these attributes do not have any ef
 **Terms (LoanTerms)** — set at disburse, editable thereafter by the servicer or admin via `updateLoanTerms` (blocked once the loan is in a terminal status):
 
 - Origination Date
-- Interest Rate (basis points, 30/360 day-count convention)
+- Interest Rate (basis points)
 - Expected Monthly Payment
+
+The day-count convention that turns `interestRate` into accrued interest is **per-loan and not carried onchain** — it is held off-chain by the servicer (actual/365 by default, 30/360 also supported). Interest is accrued off-chain and posted to the ledger; `interestRate` alone is not sufficient to reproduce those entries.
 
 `updateLoanTerms(loanId, originationDate, interestRate, expectedMonthlyPayment)` uses `0` as a per-field sentinel meaning "no change" (so `expectedMonthlyPayment` cannot be set to exactly `0`), stamps `updatedAt` with `block.timestamp`, and emits `LoanTermsSet` with the resulting stored values.
 
@@ -97,7 +100,7 @@ uint48 maturityDate;
 /// Loan terms, set at disburse and editable via updateLoanTerms
 struct LoanTerms {
 uint48 originationDate;
-uint32 interestRate; // basis points (500 = 5.00%), 30/360
+uint32 interestRate; // basis points (500 = 5.00%); day-count convention is off-chain
 int128 expectedMonthlyPayment; // currency base units
 }
 
@@ -253,7 +256,7 @@ Creates a single entry to record the accrual:
 
 ### Charge Misc Fee
 
-The `chargeMiscFee` function allows the servicer to charge miscellaneous fees to the borrower (e.g. late fees, NSF fees). Unlike regular interest/fee accruals which go through the unallocated interest pool, misc fees are recorded directly as a borrower receivable and servicer payable.
+The `chargeMiscFee` function allows the servicer to charge miscellaneous fees to the borrower (e.g. late fees, NSF fees). Mirroring the interest path, the charge only records the borrower receivable against an unallocated staging pool; the withdrawable servicer payable is not created until the borrower actually pays the fee through `applyWaterfall`. This keeps the servicer's misc-fee payable cash-backed at withdrawal time.
 
 ```solidity
 function chargeMiscFee(uint64 loanId, int128 amount, uint48 timestamp, bytes32 ref) external onlyServicerOrAdmin
@@ -267,7 +270,7 @@ function chargeMiscFee(uint64 loanId, int128 amount, uint48 timestamp, bytes32 r
 
 **Ledger Entry:**
 
-- From: `ACC_SERVICER_MISC_FEE_PAYABLE`, To: `ACC_BORROWER_MISC_FEE_RECEIVABLE`
+- From: `ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE`, To: `ACC_BORROWER_MISC_FEE_RECEIVABLE`
 - Entry type: `ENTRY_MISC_FEE_CHARGE`
 
 ### Fund
@@ -323,7 +326,7 @@ function disburse(
 - `netDisbursedAmount`: The amount sent to borrower (net of origination fee)
 - `originationFee`: The fee withheld for the originator (can be 0)
 - `originationDate`, `nextDueDate`, `maturityDate`: Optional loan dates (0 = not set)
-- `interestRate`: Annual interest rate in basis points (500 = 5.00%), 30/360 day-count convention
+- `interestRate`: Annual interest rate in basis points (500 = 5.00%). The day-count convention is per-loan and held off-chain — see [Data Model](#data-model)
 - `expectedMonthlyPayment`: Expected monthly payment amount in currency base units (set once, never updated)
 
 **Validation:**
@@ -420,25 +423,29 @@ function applyWaterfall(
 - `miscFees` must not exceed outstanding misc fee receivable minus already-paid misc fees (`BorrowerMiscFeeReceivable + BorrowerMiscFeePaid`)
 - `principal` must not exceed outstanding principal receivable minus already-repaid principal (`BorrowerPrincipalReceivable + BorrowerPrincipalRepaid`). Any excess borrower payment stays unallocated in `ACC_BORROWER_PAYMENT_CLEARING` and can be returned via `refundBorrower`.
 
-**Ledger Entries (up to 5, all conditional on amount > 0):**
+**Ledger Entries (up to 6, all conditional on amount > 0):**
 
-1. Clear misc fee debt:
+1. Allocate misc fee (promote collected fee to the withdrawable servicer payable):
+   - From: `ACC_SERVICER_MISC_FEE_PAYABLE`, To: `ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE`
+   - Entry type: `ENTRY_MISC_FEE_ALLOCATION`
+
+2. Clear misc fee debt:
    - From: `ACC_BORROWER_MISC_FEE_PAID`, To: `ACC_BORROWER_PAYMENT_CLEARING`
    - Entry type: `ENTRY_MISC_FEE_DEBT_CLEARANCE`
 
-2. Allocate servicer fee:
+3. Allocate servicer fee:
    - From: `ACC_SERVICER_FEE_PAYABLE`, To: `ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE`
    - Entry type: `ENTRY_SERVICER_FEE_ALLOCATION`
 
-3. Allocate investor interest:
+4. Allocate investor interest:
    - From: `ACC_INVESTOR_INTEREST_PAYABLE`, To: `ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE`
    - Entry type: `ENTRY_INVESTOR_INTEREST_ALLOCATION`
 
-4. Clear borrower debt obligation:
+5. Clear borrower debt obligation:
    - From: `ACC_BORROWER_INTEREST_PAID`, To: `ACC_BORROWER_PAYMENT_CLEARING`
    - Entry type: `ENTRY_BORROWER_INTEREST_DEBT_CLEARANCE`
 
-5. Clear principal debt:
+6. Clear principal debt:
    - From: `ACC_BORROWER_PRINCIPAL_REPAID`, To: `ACC_BORROWER_PAYMENT_CLEARING`
    - Entry type: `ENTRY_BORROWER_PRINCIPAL_PAYMENT`
 
@@ -463,6 +470,7 @@ function investorWithdraw(
 **Behavior:**
 
 - Automatically calculates and withdraws all available interest and principal per loan
+- Investor nets are guaranteed non-negative: standard flows cannot produce negatives and `createLedgerEntries` rejects batches that would leave the investor's net interest or net principal payable below zero (`InvestorNetNegative`)
 - Returns an array of `InvestorWithdrawalResult` structs containing the actual amounts of principal vs. interest withdrawn per loan (for tax reporting purposes)
 - Loans with zero payable amounts still appear in results with zero values (no entries created, no gas wasted)
 - Single shared `timestamp` and `ref` for all entries
@@ -516,6 +524,7 @@ function servicerWithdraw(
 - All loans must have the same servicer address
 - Caller must be the servicer or admin for all loans in the batch
 - Automatically withdraws all available servicing fees and misc fees per loan
+- **Reverts with `ServicerOwesFunds`** if either fee bucket on any loan in the batch is negative (the servicer owes the loan, e.g. an open Scenario 2 Option A credit). Cure paths: `returnFunds`, a manual `ENTRY_SERVICER_FEE_RECLASSIFICATION` entry between the two servicer paid accounts via `createLedgerEntries`, or the next waterfall's fee allocation absorbing the credit
 - Returns an array of `ServicerWithdrawalResult` structs with amounts per loan
 - Loans with zero amounts (both `miscFee == 0` and `servicingFee == 0`) are skipped silently (no entries created, still appear in results)
 - Single shared `timestamp` and `ref` for all entries
@@ -656,13 +665,14 @@ The `updatedFromBalance` and `updatedToBalance` fields provide the resulting bal
 - **`accrue()`** emits `EntryCreated` with `ENTRY_INTEREST_ACCRUAL`
 - **`chargeMiscFee()`** emits `EntryCreated` with `ENTRY_MISC_FEE_CHARGE`
 - **`pay()`** emits `EntryCreated` with `ENTRY_BORROWER_PAYMENT`, and `LoanLastPaymentDateUpdated`
-- **`applyWaterfall()`** emits up to 5 `EntryCreated` events:
+- **`applyWaterfall()`** emits up to 6 `EntryCreated` events:
+  - `ENTRY_MISC_FEE_ALLOCATION` (if miscFees > 0)
   - `ENTRY_MISC_FEE_DEBT_CLEARANCE` (if miscFees > 0)
   - `ENTRY_SERVICER_FEE_ALLOCATION` (if servicingFees > 0)
   - `ENTRY_INVESTOR_INTEREST_ALLOCATION` (if investorInterest > 0)
   - `ENTRY_BORROWER_INTEREST_DEBT_CLEARANCE` (if totalInterestAndFees > 0)
   - `ENTRY_BORROWER_PRINCIPAL_PAYMENT` (if principal > 0)
-- **`investorWithdraw()`** emits up to 2 `EntryCreated` events:
+- **`investorWithdraw()`** emits up to 2 `EntryCreated` events per loan:
   - `ENTRY_INVESTOR_INTEREST_WITHDRAWAL` (if interest > 0)
   - `ENTRY_INVESTOR_PRINCIPAL_WITHDRAWAL` (if principal > 0)
 - **`originatorWithdraw()`** emits 1 `EntryCreated` event per loan:

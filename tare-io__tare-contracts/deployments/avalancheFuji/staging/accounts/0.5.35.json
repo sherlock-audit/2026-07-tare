@@ -1,0 +1,18 @@
+{
+  "blockNumber": 57761189,
+  "chain": "avalancheFuji",
+  "chainId": 43113,
+  "commitHash": "76c8f1f",
+  "component": "accounts",
+  "contracts": {
+    "MultiSendCallOnly": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+    "SafeProxyFactory": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+    "SafeSingleton": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+    "SmartAccountFactory": "0xBb91536A1AE10AF0f7c64c45abc2b606fcd58BAC",
+    "TrustedCalls": "0xbbc85f1f13893c965c18647e973418A0932cd946",
+    "TrustedSpender": "0xC16B54772a87714A17718FB8c5791C53533082BB"
+  },
+  "deploymentName": "staging",
+  "timestamp": 1786727060,
+  "version": "0.5.35"
+}

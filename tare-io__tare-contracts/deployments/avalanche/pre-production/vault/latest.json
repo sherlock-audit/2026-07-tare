@@ -1,0 +1,15 @@
+{
+  "blockNumber": 93194658,
+  "chain": "avalanche",
+  "chainId": 43114,
+  "commitHash": "4092336",
+  "component": "vault",
+  "contracts": {
+    "NavCalculator": "0xCB54Cfe80456e641Db10aaCA2c8d93f52CAA371d",
+    "PortfolioVault": "0xBb69D343A65c67d42A7ab2c9A2501D7e76182670",
+    "VaultShareToken": "0x51b006fB65324D6b025aBB3312D0d745e2Df659b"
+  },
+  "deploymentName": "pre-production",
+  "timestamp": 1787155131,
+  "version": "0.5.36"
+}

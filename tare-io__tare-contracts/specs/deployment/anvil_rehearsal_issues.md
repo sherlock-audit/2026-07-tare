@@ -35,7 +35,7 @@ fixes needed.
   annotate addresses when rendering.
 - **`verify-deployment` — report current vault NAV.** Add the
   `PortfolioVault.lastNav()` value to the `verify-deployment` output (informational,
-  not a pass/fail gate) so the §7.7 NAV bootstrap can be confirmed in the same
+  not a pass/fail gate) so the §7.8 NAV bootstrap can be confirmed in the same
   hard-gate run rather than via a separate `cast call $PORTFOLIO_VAULT "lastNav()(uint256)"`.
 
 ## Notes

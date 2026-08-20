@@ -27,6 +27,7 @@ import {
   ACC_SERVICER_MISC_FEE_PAID,
   ACC_SERVICER_MISC_FEE_PAYABLE,
   ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE,
+  ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE,
   ACC_UNFUNDED_COMMITMENT
 } from "contracts/interfaces/Accounts.sol";
 import {MockUSDC} from "../mocks/USDC.sol";
@@ -256,7 +257,7 @@ contract LoansTestBase is Test {
   }
 
   function _getLoanTotalBalance(uint64 loanId_) internal view returns (int128) {
-    uint8[21] memory allAccounts = [
+    uint8[22] memory allAccounts = [
       ACC_CASH,
       ACC_BORROWER_PRINCIPAL_RECEIVABLE,
       ACC_BORROWER_INTEREST_RECEIVABLE,
@@ -275,6 +276,7 @@ contract LoansTestBase is Test {
       ACC_UNALLOCATED_BORROWER_INTEREST_PAYABLE,
       ACC_SERVICER_MISC_FEE_PAYABLE,
       ACC_SERVICER_ADJUSTMENT,
+      ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE,
       ACC_BORROWER_PRINCIPAL_REPAID,
       ACC_BORROWER_INTEREST_PAID,
       ACC_BORROWER_MISC_FEE_PAID

@@ -11,7 +11,7 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 interface IGuardianAccessControl is IAccessControl {
   /** @notice Thrown when an attempt is made to change the role admin of `GUARDIAN_ROLE`. */
   error CannotChangeGuardianAdmin();
-  /** @notice Thrown when `_initGuardian` is called with the zero address. */
+  /** @notice Thrown when the zero address is provided as a guardian. */
   error InvalidGuardian();
   /** @notice Thrown when `renounceRole` is called — self-renouncing roles is disabled. */
   error RenounceRoleDisabled();

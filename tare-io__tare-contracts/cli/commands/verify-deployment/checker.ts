@@ -13,6 +13,16 @@ import {
 import { hasRoleAbi, getRoleAdminAbi, trustedCallsAbi } from "./constants.js"
 import type { Check } from "./types.js"
 
+export function addressSetsEqual(expected: Address[], actual: Address[]): boolean {
+  const expectedSet = new Set(expected.map((address) => getAddress(address)))
+  const actualSet = new Set(actual.map((address) => getAddress(address)))
+  return (
+    expected.length === actual.length &&
+    expectedSet.size === actualSet.size &&
+    [...expectedSet].every((address) => actualSet.has(address))
+  )
+}
+
 export class Checker {
   readonly results: Check[] = []
   private readonly client: PublicClient<Transport, Chain | undefined>
@@ -54,6 +64,19 @@ export class Checker {
       },
     ] as const
     return this.client.readContract({ address: contract, abi, functionName, args: args ?? [] }) as Promise<Address>
+  }
+
+  async readAddressArray(contract: Address, functionName: string): Promise<Address[]> {
+    const abi = [
+      {
+        type: "function" as const,
+        name: functionName,
+        inputs: [],
+        outputs: [{ type: "address[]" as const }],
+        stateMutability: "view" as const,
+      },
+    ] as const
+    return this.client.readContract({ address: contract, abi, functionName }) as Promise<Address[]>
   }
 
   async readBytes32(contract: Address, functionName: string): Promise<`0x${string}`> {
@@ -193,6 +216,30 @@ export class Checker {
       })
     } catch (err) {
       this.fail(section, `${contractName}: ${getter} is ${expected}`, String(err))
+    }
+  }
+
+  async checkAddressSet(
+    section: string,
+    contractName: string,
+    contract: Address,
+    getter: string,
+    expected: Address[]
+  ): Promise<void> {
+    const label = `${contractName}: ${getter} matches expected set`
+    try {
+      const actual = await this.readAddressArray(contract, getter)
+      const matches = addressSetsEqual(expected, actual)
+      this.results.push({
+        section,
+        name: label,
+        status: matches ? "pass" : "fail",
+        detail: matches
+          ? undefined
+          : `expected [${expected.map((address) => getAddress(address)).join(", ")}], got [${actual.map((address) => getAddress(address)).join(", ")}]`,
+      })
+    } catch (err) {
+      this.fail(section, label, String(err))
     }
   }
 

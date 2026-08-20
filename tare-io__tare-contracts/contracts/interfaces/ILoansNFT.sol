@@ -98,6 +98,20 @@ interface ILoansNFT is IERC721, IERC721Enumerable, ILockable {
   function setBaseURI(string calldata newBaseURI) external;
 
   /**
+   * @notice Pauses transfers, approvals, and locking. Callable by holders of
+   * the Loans contract's admin, guardian, or pauser role.
+   * @dev `unlock` and `forceTransfer` stay live so incident recovery paths
+   * (e.g. `LoansExchange.forceCancelOffer`) keep working while paused.
+   */
+  function pause() external;
+
+  /**
+   * @notice Unpauses the contract. Callable only by holders of the Loans
+   * contract's guardian role.
+   */
+  function unpause() external;
+
+  /**
    * @notice Guardian-only transfer that bypasses ERC721 approvals. Intended as
    * a rescue path for NFTs stranded in a stuck receiver after settlement.
    * @dev Reverts while the token is locked; protocol-specific locks must be

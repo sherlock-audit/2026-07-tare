@@ -33,6 +33,7 @@ export default defineConfig(() => {
           "TrustedSpender.sol/*.json",
           "TrustedCalls.sol/*.json",
           "MultiSendCallOnly.sol/MultiSendCallOnly.json",
+          "Forwarder.sol/Forwarder.json",
           "PortfolioVault.sol/PortfolioVault.json",
           "VaultShareToken.sol/VaultShareToken.json",
           "NavCalculator.sol/NavCalculator.json",

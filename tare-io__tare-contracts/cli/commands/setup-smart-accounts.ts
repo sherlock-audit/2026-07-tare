@@ -1,5 +1,11 @@
 import type { Command } from "commander"
-import { resolveDeployment, readContractAddress, getSenderAddress, type SafeExecOptions } from "../lib/cast.js"
+import {
+  resolveDeployment,
+  readContractAddress,
+  readOptionalContractAddress,
+  getSenderAddress,
+  type SafeExecOptions,
+} from "../lib/cast.js"
 import { outputResult } from "../lib/output.js"
 import { loadSetupManifest, smartAccountsFromManifest } from "../lib/setup-smart-accounts/manifest.js"
 import {
@@ -13,6 +19,7 @@ import {
   buildOwnershipTransitionSteps,
 } from "../lib/setup-smart-accounts/builders.js"
 import { assertPreconditions } from "../lib/setup-smart-accounts/preconditions.js"
+import { resolveForwarder } from "../lib/forwarder.js"
 import { runSteps, groupSteps, lockedSaHint } from "../lib/setup-smart-accounts/runner.js"
 import { logProgress } from "../lib/utils.js"
 import { rolesManifestPath } from "../lib/roles-manifest.js"
@@ -90,7 +97,7 @@ export function registerSetupSmartAccounts(program: Command): void {
   program
     .command("setup-smart-accounts")
     .description(
-      "Configure all eight role smart accounts from a manifest: hot-proxy delegation, approvals, vault wiring, address-book registrations, and the final ownership transition."
+      "Configure all eight role smart accounts from a manifest: Forwarder delegation, approvals, vault wiring, address-book registrations, and the final ownership transition."
     )
     .option("--input <path>", "Path to the setup manifest JSON (default: derived roles/latest.json)")
     .option("--dry-run", "Check state without executing transactions")
@@ -103,6 +110,10 @@ export function registerSetupSmartAccounts(program: Command): void {
       "--allow-extra-owners",
       "Verify the expected owner set as a subset instead of the exact set (local dev keeps the deployer as an owner)"
     )
+    .option(
+      "--forwarder <address>",
+      "Forwarder address, overriding the manifest's `forwarder` (default: the accounts deployment manifest, which only local dev populates)"
+    )
     .action(function (
       this: Command,
       opts: {
@@ -111,6 +122,7 @@ export function registerSetupSmartAccounts(program: Command): void {
         skipPreconditions?: boolean
         finalThreshold: string
         allowExtraOwners?: boolean
+        forwarder?: string
       }
     ) {
       const cmd = this
@@ -126,21 +138,28 @@ export function registerSetupSmartAccounts(program: Command): void {
       }
 
       const manifest = loadSetupManifest(rolesManifestPath(root, config, opts.input))
-
+      const smartAccounts = smartAccountsFromManifest(manifest)
+      const forwarder = resolveForwarder({
+        option: opts.forwarder,
+        manifest: manifest.forwarder,
+        deployment:
+          readOptionalContractAddress(root, config, "forwarder", "Forwarder") ??
+          readOptionalContractAddress(root, config, "accounts", "Forwarder"),
+      })
       const ctx: SetupContext = {
         loans: readContractAddress(root, config, "loans", "Loans"),
         usdc: readContractAddress(root, config, "loans", "USDC"),
         trustedCalls: readContractAddress(root, config, "accounts", "TrustedCalls"),
         trustedSpender: readContractAddress(root, config, "accounts", "TrustedSpender"),
+        forwarder,
         loansNft: readContractAddress(root, config, "loans", "LoansNFT"),
         loansExchange: readContractAddress(root, config, "loans", "LoansExchange"),
         portfolioVault: readContractAddress(root, config, "vault", "PortfolioVault"),
         vaultShareToken: readContractAddress(root, config, "vault", "VaultShareToken"),
         operationalManagementSafe: manifest.operationalManagementSafe,
-        hotProxy: manifest.hotProxy,
         guardianSafe: manifest.guardianSafe,
         offramp: manifest.offramp,
-        smartAccounts: smartAccountsFromManifest(manifest),
+        smartAccounts,
         deployment,
         execOpts,
         finalThreshold,
@@ -150,8 +169,8 @@ export function registerSetupSmartAccounts(program: Command): void {
       const manifestData = {
         ...ctx.smartAccounts,
         operationalManagementSafe: ctx.operationalManagementSafe,
-        hotProxy: ctx.hotProxy,
         guardianSafe: ctx.guardianSafe,
+        forwarder: ctx.forwarder,
         offramp: ctx.offramp ?? null,
         dryRun,
       }
@@ -163,7 +182,7 @@ export function registerSetupSmartAccounts(program: Command): void {
         addressLabels[address.toLowerCase()] = `${role} SA`
       }
       addressLabels[ctx.operationalManagementSafe.toLowerCase()] = "operationalManagementSafe"
-      addressLabels[ctx.hotProxy.toLowerCase()] = "hotProxy"
+      addressLabels[ctx.forwarder.toLowerCase()] = "forwarder"
       addressLabels[ctx.guardianSafe.toLowerCase()] = "guardianSafe"
       if (ctx.offramp) addressLabels[ctx.offramp.toLowerCase()] = "offramp"
 

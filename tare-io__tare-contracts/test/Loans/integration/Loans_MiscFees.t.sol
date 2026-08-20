@@ -5,6 +5,7 @@ import {LoansTestBase} from "../../setup/LoansTestBase.t.sol";
 import {Entry} from "contracts/interfaces/ILoans.sol";
 import {
   ENTRY_MISC_FEE_CHARGE,
+  ENTRY_MISC_FEE_ALLOCATION,
   ENTRY_MISC_FEE_DEBT_CLEARANCE,
   ENTRY_MISC_FEE_WITHDRAWAL,
   ENTRY_SERVICER_FEE_WITHDRAWAL
@@ -18,7 +19,8 @@ import {
   ACC_INVESTOR_INTEREST_PAYABLE,
   ACC_SERVICER_FEE_PAID,
   ACC_SERVICER_MISC_FEE_PAID,
-  ACC_SERVICER_MISC_FEE_PAYABLE
+  ACC_SERVICER_MISC_FEE_PAYABLE,
+  ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE
 } from "contracts/interfaces/Accounts.sol";
 import {asUint} from "test/helpers/Int128Utils.sol";
 
@@ -42,11 +44,12 @@ contract Loans_MiscFeesTest is LoansTestBase {
     vm.prank(servicer);
     loans.chargeMiscFee(loanId, MISC_FEE, timeNow, REF);
 
-    assertEq(loans.getLoanAccountBalance(loanId, ACC_SERVICER_MISC_FEE_PAYABLE), -MISC_FEE);
+    assertEq(loans.getLoanAccountBalance(loanId, ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE), -MISC_FEE);
+    assertEq(loans.getLoanAccountBalance(loanId, ACC_SERVICER_MISC_FEE_PAYABLE), 0);
     assertEq(loans.getLoanAccountBalance(loanId, ACC_BORROWER_MISC_FEE_RECEIVABLE), MISC_FEE);
 
     Entry memory chargeEntry = loans.getLoanEntry(loanId, loans.entryCount(loanId));
-    assertEq(uint8(chargeEntry.from), ACC_SERVICER_MISC_FEE_PAYABLE);
+    assertEq(uint8(chargeEntry.from), ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE);
     assertEq(uint8(chargeEntry.to), ACC_BORROWER_MISC_FEE_RECEIVABLE);
     assertEq(chargeEntry.amount, MISC_FEE);
     assertEq(chargeEntry.entryType, ENTRY_MISC_FEE_CHARGE);
@@ -69,15 +72,24 @@ contract Loans_MiscFeesTest is LoansTestBase {
     vm.prank(servicer);
     loans.applyWaterfall(loanId, MISC_FEE, servicerFee, partialInterest, 0, 0, timeNow, REF);
 
-    // 4 entries: misc fee clearance, svc alloc, interest alloc, interest clearance (no principal)
-    assertEq(loans.entryCount(loanId), entryCountBefore + 4);
+    // 5 entries: misc alloc, misc clearance, svc alloc, interest alloc, interest clearance (no principal)
+    assertEq(loans.entryCount(loanId), entryCountBefore + 5);
 
-    Entry memory miscClearance = loans.getLoanEntry(loanId, entryCountBefore + 1);
+    Entry memory miscAllocation = loans.getLoanEntry(loanId, entryCountBefore + 1);
+    assertEq(uint8(miscAllocation.from), ACC_SERVICER_MISC_FEE_PAYABLE);
+    assertEq(uint8(miscAllocation.to), ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE);
+    assertEq(miscAllocation.amount, MISC_FEE);
+    assertEq(miscAllocation.entryType, ENTRY_MISC_FEE_ALLOCATION);
+
+    Entry memory miscClearance = loans.getLoanEntry(loanId, entryCountBefore + 2);
     assertEq(uint8(miscClearance.from), ACC_BORROWER_MISC_FEE_PAID);
     assertEq(uint8(miscClearance.to), ACC_BORROWER_PAYMENT_CLEARING);
     assertEq(miscClearance.amount, MISC_FEE);
     assertEq(miscClearance.entryType, ENTRY_MISC_FEE_DEBT_CLEARANCE);
 
+    // Servicer misc payable is now cash-backed; the unallocated pool is cleared.
+    assertEq(loans.getLoanAccountBalance(loanId, ACC_SERVICER_MISC_FEE_PAYABLE), -MISC_FEE);
+    assertEq(loans.getLoanAccountBalance(loanId, ACC_UNALLOCATED_BORROWER_MISC_FEE_PAYABLE), 0);
     assertEq(loans.getLoanAccountBalance(loanId, ACC_BORROWER_MISC_FEE_PAID), -MISC_FEE);
     assertEq(loans.getLoanAccountBalance(loanId, ACC_BORROWER_PAYMENT_CLEARING), 0);
     assertEq(loans.getLoanAccountBalance(loanId, ACC_INVESTOR_INTEREST_PAYABLE), -partialInterest);

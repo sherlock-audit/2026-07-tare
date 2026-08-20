@@ -48,6 +48,7 @@ export function assertGrantRolesPreconditions(ctx: GrantRolesContext): void {
     [ctx.proposerSafe, "proposerSafe"],
     [ctx.manifest.whitelisterSafe, "whitelisterSafe"],
     [ctx.manifest.originatorSa, "originatorSa"],
+    [ctx.manifest.investorSa, "investorSa"],
     [ctx.manifest.portfolioManagerSa, "portfolioManagerSa"],
     [ctx.manifest.investorManagerSa, "investorManagerSa"],
     [ctx.manifest.calculatingAgentSa, "calculatingAgentSa"],

@@ -1,18 +1,18 @@
 import { hasRole, isRegisteredForRole } from "../onchain.js"
 import { Roles } from "../roles.js"
 import type { RoleIds } from "./build.js"
-import type { GrantCheck, GrantRolesContext } from "./types.js"
+import type { GrantCheck, GrantChecksContext } from "./types.js"
 
 export function checksToRecord(checks: GrantCheck[]): Record<string, boolean> {
   return Object.fromEntries(checks.map((check) => [check.label, check.satisfied]))
 }
 
 /**
- * Evaluate the desired end state of all five grants. Used both as the
+ * Evaluate the desired end state of all six grants. Used both as the
  * idempotency guard (before scheduling) and the post-execution verification.
  * The order matches the grant table.
  */
-export function checkGrantedRoles(ctx: GrantRolesContext, roleIds: RoleIds): GrantCheck[] {
+export function checkGrantedRoles(ctx: GrantChecksContext, roleIds: RoleIds): GrantCheck[] {
   const { manifest } = ctx
   return [
     {
@@ -34,6 +34,10 @@ export function checkGrantedRoles(ctx: GrantRolesContext, roleIds: RoleIds): Gra
     {
       label: `VaultShareToken.hasRole(WHITELISTER_ROLE, ${manifest.whitelisterSafe})`,
       satisfied: hasRole(ctx.vaultShareToken, roleIds.whitelister, manifest.whitelisterSafe, ctx.deployment),
+    },
+    {
+      label: `Loans.isRegisteredForRole(vault, Investor, ${manifest.investorSa})`,
+      satisfied: isRegisteredForRole(ctx.loans, ctx.portfolioVault, Roles.Investor, manifest.investorSa, ctx.deployment),
     },
   ]
 }

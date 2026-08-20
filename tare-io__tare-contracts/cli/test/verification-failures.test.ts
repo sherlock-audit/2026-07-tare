@@ -5,17 +5,18 @@ import type { SaVerification } from "../lib/setup-smart-accounts/verification.js
 import { MAX_UINT208, MAX_UINT256 } from "../lib/constants.js"
 
 const OPS_MGMT = "0x1000000000000000000000000000000000000001"
-const HOT_PROXY = "0x1000000000000000000000000000000000000002"
 const GUARDIAN = "0x1000000000000000000000000000000000000003"
+// The Forwarder holds the hot relay owner slot wherever it is deployed.
+const FORWARDER = "0x1000000000000000000000000000000000000004"
 
 function configuredEntry(overrides: SaVerification = {}): SaVerification {
   return {
-    "TrustedCalls.isDelegate(SA, hotProxy)": true,
-    "TrustedSpender.isDelegate(SA, hotProxy)": true,
+    "TrustedCalls.isDelegate(SA, forwarder)": true,
+    "TrustedSpender.isDelegate(SA, forwarder)": true,
     "SA.isModuleEnabled(TrustedCalls)": true,
     "USDC.allowance(SA, TrustedSpender)": MAX_UINT256,
-    owners: [OPS_MGMT, HOT_PROXY, GUARDIAN],
-    "ownerSet == {opsMgmt, hotProxy, guardianSafe}": true,
+    owners: [OPS_MGMT, FORWARDER, GUARDIAN],
+    "ownerSet == {opsMgmt, forwarder, guardianSafe}": true,
     threshold: 2,
     ...overrides,
   }
@@ -28,21 +29,21 @@ test("fully configured SA yields no failures", () => {
 test("bootstrap-owned SA fails on owner set and threshold", () => {
   const bootstrap = configuredEntry({
     owners: [OPS_MGMT],
-    "ownerSet == {opsMgmt, hotProxy, guardianSafe}": false,
+    "ownerSet == {opsMgmt, forwarder, guardianSafe}": false,
     threshold: 1,
   })
   const failures = collectVerificationFailures({ borrower: bootstrap }, 2)
   assert.deepEqual(failures, [
-    "[borrower] ownerSet == {opsMgmt, hotProxy, guardianSafe}",
+    "[borrower] ownerSet == {opsMgmt, forwarder, guardianSafe}",
     "[borrower] threshold: expected 2, got 1",
   ])
 })
 
 test("missing delegate, disabled module, and operator flag fail", () => {
   const broken = configuredEntry({
-    "TrustedCalls.isDelegate(SA, hotProxy)": false,
+    "TrustedCalls.isDelegate(SA, forwarder)": false,
     "SA.isModuleEnabled(TrustedCalls)": false,
-    "PortfolioVault.isOperator(SA, hotProxy)": false,
+    "PortfolioVault.isOperator(SA, forwarder)": false,
   })
   const failures = collectVerificationFailures({ shareholder: broken }, 2)
   assert.equal(failures.length, 3)
@@ -83,5 +84,15 @@ test("failures across multiple roles are all reported", () => {
   assert.deepEqual(failures, [
     "[originator] threshold: expected 2, got 1",
     "[servicer] Loans.isRegisteredForRole(SA, Investor, portfolioVault)",
+  ])
+})
+
+test("an SA missing the forwarder owner slot fails the owner set", () => {
+  const noRelayOwner = configuredEntry({
+    owners: [OPS_MGMT, GUARDIAN],
+    "ownerSet == {opsMgmt, forwarder, guardianSafe}": false,
+  })
+  assert.deepEqual(collectVerificationFailures({ investor: noRelayOwner }, 2), [
+    "[investor] ownerSet == {opsMgmt, forwarder, guardianSafe}",
   ])
 })

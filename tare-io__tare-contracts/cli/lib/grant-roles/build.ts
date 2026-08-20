@@ -1,5 +1,5 @@
 import { castCall, castCalldata } from "../cast.js"
-import type { GrantCall, GrantRolesContext } from "./types.js"
+import type { GrantCall, GrantChecksContext, GrantRolesContext } from "./types.js"
 
 /** Role identifiers read from the on-chain contracts. */
 export interface RoleIds {
@@ -10,7 +10,7 @@ export interface RoleIds {
 }
 
 /** Read the four `bytes32` role identifiers from the vault-side contracts. */
-export function readRoleIds(ctx: GrantRolesContext): RoleIds {
+export function readRoleIds(ctx: GrantChecksContext): RoleIds {
   return {
     portfolioManager: castCall(ctx.portfolioVault, "PORTFOLIO_MANAGER()(bytes32)", [], ctx.deployment),
     investorManager: castCall(ctx.portfolioVault, "INVESTOR_MANAGER()(bytes32)", [], ctx.deployment),
@@ -20,7 +20,7 @@ export function readRoleIds(ctx: GrantRolesContext): RoleIds {
 }
 
 /**
- * The five guardian-routed inner calls, in the order documented in the
+ * The six guardian-routed inner calls, in the order documented in the
  * production runbook. The order is fixed so the operation hash is deterministic
  * for a given salt.
  */
@@ -51,6 +51,13 @@ export function buildGrantCalls(ctx: GrantRolesContext, roleIds: RoleIds): Grant
       label: `VaultShareToken.grantRole(WHITELISTER_ROLE, ${manifest.whitelisterSafe})`,
       target: ctx.vaultShareToken,
       data: castCalldata("grantRole(bytes32,address)", [roleIds.whitelister, manifest.whitelisterSafe]),
+    },
+    {
+      // Buyer-side exchange entry: without it every LoansExchange settlement
+      // into the vault reverts SellerNotRegistered.
+      label: `PortfolioVault.registerAddress(${manifest.investorSa})`,
+      target: ctx.portfolioVault,
+      data: castCalldata("registerAddress(address)", [manifest.investorSa]),
     },
   ]
 }

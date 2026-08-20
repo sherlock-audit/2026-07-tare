@@ -19,7 +19,6 @@ export type SmartAccounts = Record<Role, string>
 /** Manifest consumed via --input. Infra Safes + eight SAs + optional offramp. */
 export interface SetupManifest {
   operationalManagementSafe: string
-  hotProxy: string
   guardianSafe: string
   originatorSa: string
   borrowerSa: string
@@ -30,10 +29,12 @@ export interface SetupManifest {
   investorManagerSa: string
   calculatingAgentSa: string
   offramp?: string
+  /** Relay address when it is deployed outside the accounts component; overridable with `--forwarder`. */
+  forwarder?: string
 }
 
 export type StepCategory =
-  "moduleActivation" | "hotProxyDelegation" | "approvals" | "vaultWiring" | "disbursement" | "addressBook" | "ownership"
+  "moduleActivation" | "relayDelegation" | "approvals" | "vaultWiring" | "disbursement" | "addressBook" | "ownership"
 
 export interface StepResult {
   step: string
@@ -58,13 +59,14 @@ export interface SetupContext {
   loans: string
   trustedCalls: string
   trustedSpender: string
+  /** Nonce-free hot relay — the only relay the role SAs authorize. */
+  forwarder: string
   usdc: string
   loansNft: string
   loansExchange: string
   portfolioVault: string
   vaultShareToken: string
   operationalManagementSafe: string
-  hotProxy: string
   guardianSafe: string
   offramp?: string
   smartAccounts: SmartAccounts

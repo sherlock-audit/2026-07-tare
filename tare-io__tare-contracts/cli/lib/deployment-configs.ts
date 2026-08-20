@@ -116,14 +116,52 @@ export const deploymentConfigs: Record<string, DeploymentConfig> = {
     shortName: "production",
     chain: "avalanche",
     usdc: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", // native USDC (Circle)
-    admin: "0x9013CD0bA21b1f706d62c9ca3E3f1cEBF995722B", // REPLACE: Admin Safe
-    guardian: "0x79a51C2C6DB0D4d7C685ad41A6B5b628C1e6bba0", // REPLACE: Timelock (deploy first)
+    admin: "0x9013CD0bA21b1f706d62c9ca3E3f1cEBF995722B", // Admin Safe (0.5.22 live)
+    guardian: "0x79a51C2C6DB0D4d7C685ad41A6B5b628C1e6bba0", // Timelock (0.5.22 live)
     loansBaseURI: "https://api.tare.io/loans/nft-metadata/",
     blockExplorerUrl: "https://snowscan.xyz",
   },
+  // Fresh Avalanche C-Chain production deployment staged alongside the live 0.5.22
+  // "production" set (deploymentId 100143114) so lms-p can keep serving it until
+  // cutover. Manifests live under deployments/avalanche/pre-production/.
+  "avalanche-pre-production": {
+    deploymentId: 100243114,
+    shortName: "pre-production",
+    chain: "avalanche",
+    usdc: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", // native USDC (Circle)
+    admin: "0x5DFf0F0ec9c3cA89c296bE3Df7507d2eC43C2684", // REPLACE: Admin Safe
+    guardian: "0xeA5C0fBD2c6D3349FB60e1B933ED1659e6c84Bd8", // REPLACE: Timelock (deploy first)
+    loansBaseURI: "https://api.tare.io/loans/nft-metadata/",
+    blockExplorerUrl: "https://snowscan.xyz",
+  },
+  // Staging deployment on Avalanche Fuji testnet (43113) against Circle's testnet
+  // USDC. Key stays "avalanche-staging" (the name lms-s references) even though the
+  // chain is Fuji — invoke with --chain avalanche --name staging. Replaces the
+  // retired mainnet mock-USDC staging deployment (100043114) — lms-s must be
+  // repointed to this deploymentId. Simplified governance: no Timelock, no Safes;
+  // a single staging admin EOA holds ADMIN_ROLE and GUARDIAN_ROLE — see
+  // specs/deployment/staging_fuji_deployment_runbook.md.
+  "avalanche-staging": {
+    deploymentId: 100143113,
+    shortName: "staging",
+    chain: "avalancheFuji",
+    usdc: "0x5425890298aed601595a70AB815c96711a31Bc65", // Circle testnet USDC on Fuji
+    admin: "0x12D92eb289702d07416F19946C111e6c31d263c1", // REPLACE: staging admin EOA (runbook §2)
+    guardian: "0x12D92eb289702d07416F19946C111e6c31d263c1", // REPLACE: same admin EOA (runbook §2)
+    loansBaseURI: "https://api.tare.live/loans/nft-metadata/",
+    blockExplorerUrl: "https://testnet.snowscan.xyz",
+  },
 }
 
-export type DeployPreset = "local" | "loans" | "accounts" | "vault" | "timelock" | "safe-infra"
+export type DeployPreset =
+  | "local"
+  | "loans"
+  | "accounts"
+  | "vault"
+  | "timelock"
+  | "forwarder"
+  | "safe-infra"
+  | "cctp-bridge"
 
 export const forgeScripts: Record<DeployPreset, string> = {
   local: "script/DeployLocal.s.sol",
@@ -131,7 +169,9 @@ export const forgeScripts: Record<DeployPreset, string> = {
   accounts: "script/DeploySmartAccounts.s.sol",
   vault: "script/DeployVault.s.sol",
   timelock: "script/DeployTimelock.s.sol",
+  forwarder: "script/DeployForwarder.s.sol",
   "safe-infra": "script/DeploySafeInfra.s.sol",
+  "cctp-bridge": "script/DeployCctpBridgeModule.s.sol",
 }
 
 export function getDeploymentConfig(name: string): DeploymentConfig {

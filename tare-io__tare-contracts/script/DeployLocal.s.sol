@@ -11,7 +11,7 @@ import {MockUSDC} from "../test/mocks/USDC.sol";
 import {DeploySafeSingleton} from "../test/helpers/DeploySafeSingleton.sol";
 import {SafeProxyFactory} from "safe-smart-account/proxies/SafeProxyFactory.sol";
 import {MultiSendCallOnly} from "safe-smart-account/libraries/MultiSendCallOnly.sol";
-import {ISafe} from "../contracts/misc/interfaces/ISafe.sol";
+import {Forwarder} from "../contracts/Forwarder.sol";
 
 /**
  * @title Local deployment script for all contracts
@@ -26,7 +26,7 @@ import {ISafe} from "../contracts/misc/interfaces/ISafe.sol";
  *   DEPLOYMENT_NAME       — Deployment name (default: "dev")
  *   SIMULATE_ONLY         — Run in simulation mode (default: false)
  *   DEPLOYER_ADDR         — Deployer address (required when SIMULATE_ONLY=true)
- *   DEPLOY_HOT_SAFE_OWNER — HotSafe owner EOA (default: DEPLOY_ADMIN)
+ *   DEPLOY_FORWARDER_SENDER — the Forwarder's authorized sender (default: DEPLOY_ADMIN)
  */
 contract DeployLocal is DeployLoansLibrary, DeploySmartAccountsLibrary, DeployVaultLibrary {
   // ---------------------------------------------------------------------------
@@ -130,30 +130,19 @@ contract DeployLocal is DeployLoansLibrary, DeploySmartAccountsLibrary, DeployVa
     });
     AccountsResult memory accounts = deployAccounts(accountsParams);
 
-    // The HotSafe's owner is the hot-proxy signing EOA, not the protocol admin —
-    // when DEPLOY_ADMIN is a Safe, the LMS hot-proxy worker must still be able to
-    // sign HotSafe transactions with its configured key.
-    address _hotSafeOwner = vm.envOr("DEPLOY_HOT_SAFE_OWNER", _admin);
-    address[] memory owners = new address[](1);
-    owners[0] = _hotSafeOwner;
-    bytes memory initializer = abi.encodeWithSelector(
-      ISafe.setup.selector,
-      owners,
-      1,
-      address(0),
-      "",
-      address(0),
-      address(0),
-      0,
-      address(0)
-    );
-    address hotSafe = address(
-      SafeProxyFactory(_safeProxyFactory).createProxyWithNonce(
-        _safeSingleton,
-        initializer,
-        uint256(keccak256("HotSafe-1"))
+    // The EOA the LMS relay signs with, not the protocol admin — when DEPLOY_ADMIN is
+    // a Safe, the relay must still sign with its own configured key.
+    address _forwarderSender = vm.envOr("DEPLOY_FORWARDER_SENDER", _admin);
+
+    Forwarder _forwarder = Forwarder(
+      create3(
+        keccak256("tareio-Forwarder-1"),
+        abi.encodePacked(type(Forwarder).creationCode, abi.encode(address(mockUsdc), deployer))
       )
     );
+    address[] memory senders = new address[](1);
+    senders[0] = _forwarderSender;
+    _forwarder.setAuthorizedSenders(senders);
 
     setLoansPermissions(_admin, _guardian);
     setLoansExchangePermissions(_admin, _guardian);
@@ -168,10 +157,10 @@ contract DeployLocal is DeployLoansLibrary, DeploySmartAccountsLibrary, DeployVa
       vm.stopBroadcast();
     }
 
-    addDeployedContract("HotSafe", hotSafe);
     writeLoansDeployment(address(_loans), address(mockUsdc));
 
     startNewComponent("accounts");
+    addDeployedContract("Forwarder", address(_forwarder));
     writeAccountsDeployment(accountsParams, accounts);
 
     startNewComponent("vault");

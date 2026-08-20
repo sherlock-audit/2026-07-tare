@@ -66,6 +66,16 @@ export function readContractAddress(root: string, config: DeploymentConfig, comp
   return address
 }
 
+/**
+ * Like {@link readContractAddress} but returns null when the contract is absent — or when the
+ * component was never deployed at all, as `forwarder` is on any chain that predates it or that
+ * bakes the Forwarder into `accounts`.
+ */
+export function readOptionalContractAddress(root: string, config: DeploymentConfig, component: DeploymentComponent, contractName: string): string | null {
+  const deployment = loadDeploymentManifest(root, config.chain, config.shortName, component, true)
+  return deployment?.contracts[contractName] ?? null
+}
+
 export function castCall(address: string, signature: string, args: string[], deployment: ResolvedDeployment): string {
   return execFileSync(
     "cast",
@@ -99,10 +109,21 @@ export function castSend(address: string, signature: string, args: string[], dep
     "--json",
   ]
 
+  // Escape hatch for RPCs that reject eth_estimateGas on the pending block
+  // ("state not available for pending block") — skips estimation entirely.
+  if (process.env.TARE_GAS_LIMIT) {
+    castArgs.push("--gas-limit", process.env.TARE_GAS_LIMIT)
+  }
+
   pushSignerArgs(castArgs, deployment)
 
   const output = execFileSync("cast", castArgs, { encoding: "utf8" })
   const receipt = JSON.parse(output)
+  // With --gas-limit set, reverts are no longer caught by estimation — they mine
+  // as failed receipts, so status must be checked to keep failures loud.
+  if (receipt.status === "0x0" || receipt.status === 0) {
+    throw new Error(`transaction reverted on-chain: ${receipt.transactionHash}`)
+  }
   return { txHash: receipt.transactionHash, receipt }
 }
 
@@ -121,6 +142,20 @@ export function isContract(address: string, deployment: ResolvedDeployment): boo
 
 export interface SafeExecOptions {
   sender?: string
+}
+
+/**
+ * Route a call through `Forwarder.forward` as a plain transaction. The signing
+ * key must be an authorized sender; no Safe nonce is involved, so concurrent
+ * calls never serialize behind one another.
+ */
+export function forwardExec(
+  forwarderAddress: string,
+  targetAddress: string,
+  callData: string,
+  deployment: ResolvedDeployment
+): CastSendResult {
+  return castSend(forwarderAddress, "forward(address,bytes)", [targetAddress, callData], deployment)
 }
 
 export interface SafeExecResult {

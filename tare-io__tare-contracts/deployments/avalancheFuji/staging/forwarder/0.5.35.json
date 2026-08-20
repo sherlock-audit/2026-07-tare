@@ -1,0 +1,13 @@
+{
+  "blockNumber": 57761287,
+  "chain": "avalancheFuji",
+  "chainId": 43113,
+  "commitHash": "76c8f1f",
+  "component": "forwarder",
+  "contracts": {
+    "Forwarder": "0x2694A2D0129c3267c183bC3C6767C7c8FEA9a001"
+  },
+  "deploymentName": "staging",
+  "timestamp": 1786727308,
+  "version": "0.5.35"
+}

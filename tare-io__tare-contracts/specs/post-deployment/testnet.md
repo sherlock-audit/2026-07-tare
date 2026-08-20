@@ -8,8 +8,8 @@ This document describes how to bring Tare smart contracts to operational state o
 
 - **Deployed contracts:** Loans, LoansNFT, SmartAccountFactory, TrustedCalls, TrustedSpender, USDC (or currency token)
 - **Admin/Guardian Safe:** A Gnosis Safe (threshold 1/N) that holds `GUARDIAN_ROLE` on Loans. The signer must be funded with native gas token.
-- **Hot Proxy Safe:** A threshold-1 Safe that is the sole owner of all Smart Accounts. The backend signs through this Safe to execute TrustedCalls and TrustedSpender operations without a multisig ceremony.
-- **Smart Accounts:** Four Safes deployed via SmartAccountFactory (Originator, Investor, Borrower, Servicer), each owned by the Hot Proxy (threshold 1/1).
+- **Forwarder:** The nonce-free relay that is a delegate on TrustedCalls/TrustedSpender and an owner of all Smart Accounts. The backend's authorized sender EOA forwards through it, so operations need no multisig ceremony.
+- **Smart Accounts:** Four Safes deployed via SmartAccountFactory (Originator, Investor, Borrower, Servicer), each owned by the Forwarder (threshold 1/1).
 
 ## What the Factory Already Does
 
@@ -17,7 +17,7 @@ When a Smart Account is deployed via `SmartAccountFactory.deploySmartAccount(...
 
 - Enables TrustedCalls as a Safe module on the SA
 - Approves each configured currency for TrustedSpender (unlimited ERC20 approval)
-- Adds each delegate (Hot Proxy) to both TrustedCalls and TrustedSpender
+- Adds each delegate (the Forwarder) to both TrustedCalls and TrustedSpender
 - Sets unlimited allowances on TrustedSpender for each trusted recipient (e.g., offramp address)
 
 See [smart-accounts.md](../smart-accounts.md) for full details.
@@ -55,7 +55,6 @@ npx tsx cli/index.ts setup-smart-account \
   --borrower <BORROWER_SA> \
   --investor <INVESTOR_SA> \
   --servicer <SERVICER_SA> \
-  --hot-proxy <HOT_PROXY> \
   --admin-safe <ADMIN_SAFE> \
   --private-key $ADMIN_SIGNER_KEY
 ```
@@ -162,5 +161,4 @@ npx tsx cli/index.ts verify-deployment \
   --borrower <address> \
   --investor <address> \
   --servicer <address> \
-  --hot-proxy <address>
 ```

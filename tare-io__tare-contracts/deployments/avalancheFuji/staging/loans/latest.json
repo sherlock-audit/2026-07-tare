@@ -1,0 +1,16 @@
+{
+  "blockNumber": 57761024,
+  "chain": "avalancheFuji",
+  "chainId": 43113,
+  "commitHash": "76c8f1f",
+  "component": "loans",
+  "contracts": {
+    "Loans": "0xeE71696780a92Ee089Ba7237d2918543B80398d0",
+    "LoansExchange": "0x13A5B971885867F0bBafFc117395C80A2F028E6b",
+    "LoansNFT": "0x40E001419D9Ef96A65155E31741002D6b4F69a58",
+    "USDC": "0x5425890298aed601595a70AB815c96711a31Bc65"
+  },
+  "deploymentName": "staging",
+  "timestamp": 1786726807,
+  "version": "0.5.35"
+}

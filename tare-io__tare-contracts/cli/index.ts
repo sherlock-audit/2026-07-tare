@@ -23,6 +23,7 @@ import { registerSafeExec } from "./commands/safe-exec.js"
 import { registerUpdateTimelockDelay } from "./commands/update-timelock-delay.js"
 import { registerSeedVault } from "./commands/seed-vault.js"
 import { registerFundUsdc } from "./commands/fund-usdc.js"
+import { registerForwarder } from "./commands/forwarder.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -72,6 +73,7 @@ registerSafeExec(program)
 registerUpdateTimelockDelay(program)
 registerSeedVault(program)
 registerFundUsdc(program)
+registerForwarder(program)
 
 async function main(): Promise<void> {
   await program.parseAsync(process.argv)

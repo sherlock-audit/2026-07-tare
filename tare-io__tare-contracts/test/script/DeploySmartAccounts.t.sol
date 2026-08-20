@@ -126,11 +126,13 @@ contract DeploySmartAccountsTest is DeployerTestBase {
    * @notice Test that ILoans.create.selector is added as trusted call
    */
   function test_Deploy_TrustedCallsOnLoansContractAdded() public view {
-    bytes4[] memory expectedSelectors = new bytes4[](4);
+    bytes4[] memory expectedSelectors = new bytes4[](6);
     expectedSelectors[0] = ILoans.create.selector;
     expectedSelectors[1] = ILoans.accrue.selector;
     expectedSelectors[2] = ILoans.fund.selector;
     expectedSelectors[3] = ILoans.disburse.selector;
+    expectedSelectors[4] = ILoans.updateLoanData.selector;
+    expectedSelectors[5] = ILoans.updateLoanTerms.selector;
 
     for (uint256 i = 0; i < expectedSelectors.length; i++) {
       assertTrue(

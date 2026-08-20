@@ -9,7 +9,7 @@
  *   Safe infra -> 4 stand-in Safes -> Timelock -> deploy local (Timelock as
  *   guardian, Admin Safe as admin) -> 8 role SAs -> setup-smart-accounts ->
  *   grant-roles (+ shareholder grant) -> hot-safe allowances -> fund USDC ->
- *   seed vault NAV -> dump state.
+ *   seed vault NAV -> Funder/vault trade setup -> dump state.
  *
  * Writes:
  *   state/anvil-state.json.gz  — gzipped anvil_dumpState snapshot
@@ -39,15 +39,20 @@ const ANVIL_LOG = process.env.ANVIL_LOG ?? "/tmp/anvil.log"
 const TSX = resolve(ROOT, "node_modules", ".bin", "tsx")
 const CLI_ENTRY = resolve(ROOT, "cli", "index.ts")
 
-// Anvil dev account #0 — the HotSafe owner (the key the LMS hot-proxy signs with)
-// and therefore the signer for hot-proxy-routed calls like seed-vault's updateNav.
-const HOT_SAFE_OWNER_ADDR = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-const HOT_SAFE_OWNER_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+// Anvil dev account #0 — the Forwarder's authorized sender (the key the LMS relay
+// signs with), therefore the signer for relayed calls like seed-vault's updateNav,
+// and the payout destination every seeded SA trusts.
+const FORWARDER_SENDER_ADDR = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+const FORWARDER_SENDER_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
 const STATE_DIR = resolve(ROOT, "state")
 const STATE_FILE = resolve(STATE_DIR, "anvil-state.json.gz")
 const MANIFEST_FILE = resolve(STATE_DIR, "anvil-manifest.json")
 const ROLES_MANIFEST_FILE = resolve(ROOT, "deployments", "foundry", "dev", "roles", "latest.json")
+
+// Shareholder USDC deposited into the vault, in whole USDC, so the vault can
+// settle a bundle purchase from the Funder on a freshly loaded snapshot.
+const VAULT_DEPOSIT_USDC = 10_000_000n
 
 // Fixed deploy-safe saltNonces so the stand-in Safes land on the same addresses
 // every bake (they are version-independent, unlike the CREATE3 protocol salts).
@@ -134,28 +139,40 @@ async function main(): Promise<void> {
     })
 
     await step("Deploy contracts (admin = Admin Safe, guardian = Timelock)", () => {
-      cli(["deploy", "local", "--keep-state", "--hot-safe-owner", HOT_SAFE_OWNER_ADDR, "--rpc-url", RPC_URL])
+      cli(["deploy", "local", "--keep-state", "--forwarder-sender", FORWARDER_SENDER_ADDR, "--rpc-url", RPC_URL])
     })
 
     // The deploy just wrote these manifests; read addresses from them directly.
     const loans = loadDeploymentManifest(ROOT, "foundry", "dev", "loans")
     const timelockManifest = loadDeploymentManifest(ROOT, "foundry", "dev", "timelock")
     const accountsManifest = loadDeploymentManifest(ROOT, "foundry", "dev", "accounts")
+    const vaultManifest = loadDeploymentManifest(ROOT, "foundry", "dev", "vault")
     const trustedSpenderAddress = accountsManifest.contracts.TrustedSpender
+    const forwarderAddress = accountsManifest.contracts.Forwarder
     const currencyAddress = loans.contracts.USDC
-    const hotSafeAddress = loans.contracts.HotSafe
     const timelockAddress = timelockManifest.contracts.TimelockController
     const loansNftAddress = loans.contracts.LoansNFT
-    if (!currencyAddress || !hotSafeAddress || !timelockAddress || !loansNftAddress || !trustedSpenderAddress) {
-      throw new Error("Missing USDC/HotSafe/TimelockController/LoansNFT/TrustedSpender in deployment manifests")
+    const portfolioVaultAddress = vaultManifest.contracts.PortfolioVault
+    if (
+      !currencyAddress ||
+      !timelockAddress ||
+      !loansNftAddress ||
+      !trustedSpenderAddress ||
+      !forwarderAddress ||
+      !portfolioVaultAddress
+    ) {
+      throw new Error(
+        "Missing USDC/TimelockController/LoansNFT/TrustedSpender/Forwarder/PortfolioVault in deployment manifests"
+      )
     }
-    console.log(`  Currency: ${currencyAddress}`)
-    console.log(`  HotSafe:  ${hotSafeAddress}`)
-    console.log(`  Timelock: ${timelockAddress}`)
+    console.log(`  Currency:  ${currencyAddress}`)
+    console.log(`  Forwarder: ${forwarderAddress}`)
+    console.log(`  Timelock:  ${timelockAddress}`)
 
-    await step("Record hot proxy + offramp in roles manifest", () => {
-      cli(["manifest", "set", "hotProxy", hotSafeAddress])
-      cli(["manifest", "set", "offramp", hotSafeAddress])
+    await step("Record offramp in roles manifest", () => {
+      // Stands in for Brale's offramp: an EOA, so dev/e2e payouts land somewhere
+      // that holds no relay authority of its own.
+      cli(["manifest", "set", "offramp", FORWARDER_SENDER_ADDR, "--eoa"])
     })
 
     const opsMgmtSafe = readRoles().operationalManagementSafe
@@ -169,7 +186,7 @@ async function main(): Promise<void> {
         "--threshold",
         "1",
         "--delegates",
-        hotSafeAddress,
+        forwarderAddress,
         "--currencies",
         currencyAddress,
         // Approves TrustedSpender as ERC-721 operator via configureSmartAccount, which the
@@ -177,7 +194,7 @@ async function main(): Promise<void> {
         "--nft-collections",
         loansNftAddress,
         "--trusted-recipients",
-        hotSafeAddress,
+        FORWARDER_SENDER_ADDR,
       ])
     })
 
@@ -197,16 +214,19 @@ async function main(): Promise<void> {
     await step("Create fixture investor smart account (local e2e extra)", () => {
       cli([
         "create-smart-account",
+        // setup-smart-accounts only covers the eight role SAs, so this one gets
+        // the Forwarder's owner slot at creation instead.
         "--owners",
-        `${opsMgmtSafe},${DEFAULT_ANVIL_ADDR}`,
+        `${opsMgmtSafe},${DEFAULT_ANVIL_ADDR},${forwarderAddress}`,
         "--threshold",
         "1",
         "--delegates",
-        hotSafeAddress,
+        forwarderAddress,
         "--currencies",
         currencyAddress,
+        // Same payout destination as the role SAs — a recipient, never a relay.
         "--trusted-recipients",
-        hotSafeAddress,
+        FORWARDER_SENDER_ADDR,
         "--manifest-key",
         "fixtureInvestorSa",
       ])
@@ -240,10 +260,19 @@ async function main(): Promise<void> {
     ] as const
 
     // Local extra (not part of the production setup): dev/e2e TrustedSpender
-    // transfer flows move funds SA -> hot safe and rely on these allowances.
+    // transfer flows move funds SA -> the payout destination and rely on these allowances.
     for (const field of saFields) {
       await step(`Set TrustedSpender allowance on ${field}`, () => {
-        cli(["set-allowance", "set", "--from", roles[field], "--to", hotSafeAddress, "--smart-account", roles[field]])
+        cli([
+          "set-allowance",
+          "set",
+          "--from",
+          roles[field],
+          "--to",
+          FORWARDER_SENDER_ADDR,
+          "--smart-account",
+          roles[field],
+        ])
       })
     }
 
@@ -270,8 +299,31 @@ async function main(): Promise<void> {
       cli(["fund-usdc"])
     })
 
-    await step("Seed vault NAV (donation + updateNav via hot proxy)", () => {
-      cli(["seed-vault", "--amount", "1"], HOT_SAFE_OWNER_KEY)
+    await step("Seed vault NAV (donation + updateNav via the Forwarder)", () => {
+      cli(["seed-vault", "--amount", "1"], FORWARDER_SENDER_KEY)
+    })
+
+    // Local extra: idle liquidity so the vault can pay for a bundle. Minting
+    // straight to the vault would accrue to DEAD_SHARES and move sharePrice from
+    // 1.0 to ~1e7; the real shareholder deposit flow keeps it at 1.0. The
+    // shareholder's USDC approval to the vault is already MAX from
+    // setup-smart-accounts, and seed-vault above left lastNav fresh and non-zero.
+    await step(`Deposit ${VAULT_DEPOSIT_USDC} USDC from the shareholder into the vault (local e2e extra)`, () => {
+      const units = (VAULT_DEPOSIT_USDC * 1_000_000n).toString()
+      const vaultExec = (safe: string, sig: string, args: string) =>
+        cli(["safe-exec", "--safe", safe, "--target", portfolioVaultAddress, "--sig", sig, "--args", args])
+
+      vaultExec(
+        roles.shareholderSa,
+        "requestDeposit(uint256,address,address)",
+        `${units},${roles.shareholderSa},${roles.shareholderSa}`
+      )
+      vaultExec(roles.investorManagerSa, "approveDeposit(address,uint256)", `${roles.shareholderSa},${units}`)
+      vaultExec(
+        roles.shareholderSa,
+        "deposit(uint256,address,address)",
+        `${units},${roles.shareholderSa},${roles.shareholderSa}`
+      )
     })
 
     await step("Dump Anvil state", () => {
@@ -305,7 +357,9 @@ async function main(): Promise<void> {
           FixtureInvestor: roles.fixtureInvestorSa,
         },
         env: {
-          HOT_PROXY_SAFE_ADDRESS: hotSafeAddress,
+          FORWARDER_ADDRESS: forwarderAddress,
+          // Payout destination for every seeded SA, and the Forwarder's authorized sender.
+          FORWARDER_SENDER_ADDRESS: FORWARDER_SENDER_ADDR,
           TIMELOCK_ADDRESS: timelockAddress,
           ADMIN_SAFE_ADDRESS: roles.adminSafe,
           PROPOSER_SAFE_ADDRESS: roles.proposerSafe,

@@ -6,12 +6,12 @@ This document covers correction scenarios for allocation errors in the waterfall
 
 Three correction scenarios are covered:
 
-| Scenario                       | Situation                                                                                     | Correction Approach                                                        |
-| :----------------------------- | :-------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------- |
-| **1. Before Payment**          | Error discovered before borrower pays                                                         | Simple reversal entry                                                      |
-| **2. Borrower Overcharged**    | Borrower paid too much total; servicer received excess                                        | Option A: Credit against future fees / Option B: Servicer refunds borrower |
-| **3. Incorrect Split**         | Borrower paid correct total, but split was wrong (servicer got too much, investor too little) | Servicer returns funds via `returnFunds()`, redistributed to investor      |
-| **4. Reverse Incorrect Split** | Borrower paid correct total, but split was wrong (investor got too much, servicer too little) | Accounting reclassification only — no cash movement, no investor clawback  |
+| Scenario                       | Situation                                                                                     | Correction Approach                                                                                                                                   |
+| :----------------------------- | :-------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Before Payment**          | Error discovered before borrower pays                                                         | Simple reversal entry                                                                                                                                 |
+| **2. Borrower Overcharged**    | Borrower paid too much total; servicer received excess                                        | Option A: Credit against future fees / Option B: Servicer refunds borrower                                                                            |
+| **3. Incorrect Split**         | Borrower paid correct total, but split was wrong (servicer got too much, investor too little) | Servicer returns funds via `returnFunds()`, redistributed to investor                                                                                 |
+| **4. Reverse Incorrect Split** | Borrower paid correct total, but split was wrong (investor got too much, servicer too little) | Accounting correction only — servicer absorbs the loss immediately, written off through `Servicer Adjustment`; no cash movement, no investor clawback |
 
 ---
 
@@ -369,9 +369,15 @@ Payment is $610 total with wrong allocation.
 
 ## Scenario 4: Reverse Incorrect Split (Investor Got Too Much, Servicer Too Little)
 
-The borrower paid the correct total amount ($610), but allocation was wrong in the opposite direction: the investor got too much and the servicer too little. Cash is never clawed back from the investor. The servicer deficit is settled from the next payment cycle.
+The borrower paid the correct total amount ($610), but allocation was wrong in the opposite direction: the investor got too much and the servicer too little. Cash is never clawed back from the investor, and investor debt cannot be carried on the books: `createLedgerEntries` reverts with `InvestorNetNegative` if a batch would leave the investor's net interest or net principal payable negative. The servicer therefore **absorbs the loss at correction time**, written off through `Servicer Adjustment` in the same batch.
 
 Correct split: $20 servicer / $90 investor interest / $500 principal = $610 total ($110 accrual).
+
+Three rules govern these corrections:
+
+1. **Book the write-off on the payable side.** The investor's excess is recharacterized as servicer-funded interest: `Investor Interest Payable` ends equal to `Investor Interest Paid`, with the delta routed through `Servicer Adjustment`. This preserves the identity `Investor Interest Paid + Investor Principal Repaid == cumulative currency sent to the investor` (paid balances always mean cash received) and keeps `Investor Principal Paid` within `Borrower Principal Repaid`, so NAV's principal formula stays honest.
+2. **The correction is balance-neutral** (exactly so in 4A; net of the borrower-side fixes in 4B/4C). Its value is the **audit trail**: the immutable entries record the erroneous allocation, its true recipient, the servicer's write-off, and the recharacterization. `Servicer Adjustment` passes through to zero.
+3. **Recovery, if pursued, happens off-chain.** Should the servicer later recover the excess from the investor, it repatriates the cash via `returnFunds(from = Servicer Adjustment)` and re-establishes its fee claim with a follow-up allocation entry. Alternatively the servicer may recoup prospectively by adjusting future waterfall allocations.
 
 Three sub-cases are covered depending on where the excess landed in the waterfall.
 
@@ -404,13 +410,14 @@ Accrual is correct. The error occurs during allocation.
 | 13  | Distribute interest to investor  | Investor Interest Paid                | Cash                      | $100   |
 | 14  | Distribute principal to investor | Investor Principal Paid               | Cash                      | $500   |
 
-#### Phase 4: Correction
+#### Phase 4: Correction (single `createLedgerEntries` batch)
 
-| #   | Transaction                      | Debit                                 | Credit                                | Amount | Entry Type                        |
-| :-- | :------------------------------- | :------------------------------------ | :------------------------------------ | :----- | :-------------------------------- |
-| 15  | Reverse investor over-allocation | Investor Interest Payable             | Unallocated Borrower Interest Payable | $10    | `ENTRY_INTEREST_REVERSAL`         |
-| 16  | Allocate to servicer             | Unallocated Borrower Interest Payable | Servicer Fee Payable                  | $10    | `ENTRY_SERVICER_FEE_ALLOCATION`   |
-| 17  | Reclassify investor payout       | Investor Principal Paid               | Investor Interest Paid                | $10    | `ENTRY_INTEREST_RECLASSIFICATION` |
+| #   | Transaction                                | Debit                                 | Credit                                | Amount | Entry Type                      |
+| :-- | :----------------------------------------- | :------------------------------------ | :------------------------------------ | :----- | :------------------------------ |
+| 15  | Reverse investor over-allocation           | Investor Interest Payable             | Unallocated Borrower Interest Payable | $10    | `ENTRY_INTEREST_REVERSAL`       |
+| 16  | Allocate to servicer                       | Unallocated Borrower Interest Payable | Servicer Fee Payable                  | $10    | `ENTRY_SERVICER_FEE_ALLOCATION` |
+| 17  | Write off uncollectible servicer claim     | Servicer Fee Payable                  | Servicer Adjustment                   | $10    | `ENTRY_ADJUSTMENT`              |
+| 18  | Recharacterize as servicer-funded interest | Servicer Adjustment                   | Investor Interest Payable             | $10    | `ENTRY_ADJUSTMENT`              |
 
 <details>
 <summary>Balance Sheet (After Correction - Sub-case 4A)</summary>
@@ -418,20 +425,20 @@ Accrual is correct. The error occurs during allocation.
 | ASSETS                          | Amount     | LIABILITIES & EQUITY                  | Amount     |
 | :------------------------------ | :--------- | :------------------------------------ | :--------- |
 | Cash                            | $0         | Investor Principal Payable            | $10,000    |
-| Borrower Principal Receivable   | $10,000    | Less: Investor Principal Paid         | ($510)     |
-| Less: Borrower Principal Repaid | ($500)     | **Net Investor Principal**            | **$9,490** |
-| **Net Principal Receivable**    | **$9,500** | Investor Interest Payable             | $90        |
-| Borrower Interest Receivable    | $110       | Less: Investor Interest Paid          | ($90)      |
+| Borrower Principal Receivable   | $10,000    | Less: Investor Principal Paid         | ($500)     |
+| Less: Borrower Principal Repaid | ($500)     | **Net Investor Principal**            | **$9,500** |
+| **Net Principal Receivable**    | **$9,500** | Investor Interest Payable             | $100       |
+| Borrower Interest Receivable    | $110       | Less: Investor Interest Paid          | ($100)     |
 | Less: Borrower Interest Paid    | ($110)     | **Net Investor Interest**             | **$0**     |
 | **Net Interest Receivable**     | **$0**     | Unallocated Borrower Interest Payable | $0         |
-|                                 |            | Servicer Fee Payable                  | $20        |
+|                                 |            | Servicer Fee Payable                  | $10        |
 |                                 |            | Less: Servicer Fee Paid               | ($10)      |
-|                                 |            | **Net Servicer Fees**                 | **$10**    |
+|                                 |            | **Net Servicer Fees**                 | **$0**     |
 | **Total Assets**                | **$9,500** | **Total Liabilities + Equity**        | **$9,500** |
 
 </details>
 
-> **Note:** `Net Servicer Fees` = +$10 means the servicer is owed $10, settled from the next payment cycle. The investor's $10 excess interest is reclassified to principal return on the books — no cash clawback.
+> **Note:** The batch is **balance-neutral**: entries 15+18 cancel on `Investor Interest Payable`, 16+17 cancel on `Servicer Fee Payable`, and `Unallocated` / `Servicer Adjustment` pass through zero. Every net is exactly $0 — the books end where they started, because under no-clawback with immediate servicer absorption the pre-correction balances were already cash-consistent. The batch's value is the permanent audit trail of the error, the write-off, and the recharacterization: the investor's $10 excess reads as interest funded by the servicer's forgone fee.
 
 ---
 
@@ -478,14 +485,17 @@ Accrual is correct. The error occurs during allocation.
 > - Entry #10 cleared only $100 of interest debt (matching what was allocated), when it should have cleared $110
 > - Entry #11 cleared $510 of principal (absorbing the $10 that should have gone to servicer fees)
 >
-> The correction (Phase 4) will: (1) reclassify $10 from principal to interest on the borrower side and (2) allocate the remaining $10 from Unallocated to servicer.
+> The correction (Phase 4) will: (1) reclassify $10 from principal to interest on the borrower side, (2) allocate the remaining $10 from Unallocated to servicer, (3) recharacterize the investor's $10 excess principal payout as interest, and (4) write off the servicer's uncollectible claim, funding the investor's excess as servicer-funded interest.
 
-#### Phase 4: Correction
+#### Phase 4: Correction (single `createLedgerEntries` batch)
 
-| #   | Transaction                 | Debit                                 | Credit                 | Amount | Entry Type                        |
-| :-- | :-------------------------- | :------------------------------------ | :--------------------- | :----- | :-------------------------------- |
-| 15  | Reclassify borrower payment | Borrower Principal Repaid             | Borrower Interest Paid | $10    | `ENTRY_INTEREST_RECLASSIFICATION` |
-| 16  | Allocate to servicer        | Unallocated Borrower Interest Payable | Servicer Fee Payable   | $10    | `ENTRY_SERVICER_FEE_ALLOCATION`   |
+| #   | Transaction                                | Debit                                 | Credit                    | Amount | Entry Type                        |
+| :-- | :----------------------------------------- | :------------------------------------ | :------------------------ | :----- | :-------------------------------- |
+| 15  | Reclassify borrower payment                | Borrower Principal Repaid             | Borrower Interest Paid    | $10    | `ENTRY_INTEREST_RECLASSIFICATION` |
+| 16  | Allocate to servicer                       | Unallocated Borrower Interest Payable | Servicer Fee Payable      | $10    | `ENTRY_SERVICER_FEE_ALLOCATION`   |
+| 17  | Reclassify investor payout                 | Investor Interest Paid                | Investor Principal Paid   | $10    | `ENTRY_INTEREST_RECLASSIFICATION` |
+| 18  | Write off uncollectible servicer claim     | Servicer Fee Payable                  | Servicer Adjustment       | $10    | `ENTRY_ADJUSTMENT`                |
+| 19  | Recharacterize as servicer-funded interest | Servicer Adjustment                   | Investor Interest Payable | $10    | `ENTRY_ADJUSTMENT`                |
 
 <details>
 <summary>Balance Sheet (After Correction - Sub-case 4B)</summary>
@@ -493,20 +503,20 @@ Accrual is correct. The error occurs during allocation.
 | ASSETS                          | Amount     | LIABILITIES & EQUITY                  | Amount     |
 | :------------------------------ | :--------- | :------------------------------------ | :--------- |
 | Cash                            | $0         | Investor Principal Payable            | $10,000    |
-| Borrower Principal Receivable   | $10,000    | Less: Investor Principal Paid         | ($510)     |
-| Less: Borrower Principal Repaid | ($500)     | **Net Investor Principal**            | **$9,490** |
-| **Net Principal Receivable**    | **$9,500** | Investor Interest Payable             | $90        |
-| Borrower Interest Receivable    | $110       | Less: Investor Interest Paid          | ($90)      |
+| Borrower Principal Receivable   | $10,000    | Less: Investor Principal Paid         | ($500)     |
+| Less: Borrower Principal Repaid | ($500)     | **Net Investor Principal**            | **$9,500** |
+| **Net Principal Receivable**    | **$9,500** | Investor Interest Payable             | $100       |
+| Borrower Interest Receivable    | $110       | Less: Investor Interest Paid          | ($100)     |
 | Less: Borrower Interest Paid    | ($110)     | **Net Investor Interest**             | **$0**     |
 | **Net Interest Receivable**     | **$0**     | Unallocated Borrower Interest Payable | $0         |
-|                                 |            | Servicer Fee Payable                  | $20        |
+|                                 |            | Servicer Fee Payable                  | $10        |
 |                                 |            | Less: Servicer Fee Paid               | ($10)      |
-|                                 |            | **Net Servicer Fees**                 | **$10**    |
+|                                 |            | **Net Servicer Fees**                 | **$0**     |
 | **Total Assets**                | **$9,500** | **Total Liabilities + Equity**        | **$9,500** |
 
 </details>
 
-> **Note:** The investor received extra principal (not interest), so there is no tax reclassification impact. The borrower's principal balance is corrected via entry 15. Servicer deficit settled from next cycle.
+> **Note:** The borrower's principal balance is corrected via entry 15; entry 17 keeps `Investor Principal Paid` within `Borrower Principal Repaid` (transiently negative inside the batch, restored before it ends — the on-chain check validates at batch end). The investor's $10 excess is recharacterized from principal return to interest, funded by the servicer's written-off fee. The investor's paid balances still sum to the $600 of cash actually received ($100 interest + $500 principal).
 
 ---
 
@@ -548,14 +558,16 @@ Accrual is correct. The error occurs during allocation.
 
 > **Note:** $5 remains in `Unallocated Borrower Interest Payable` ($110 - $10 svc - $95 interest = $5).
 
-#### Phase 4: Correction
+#### Phase 4: Correction (single `createLedgerEntries` batch)
 
-| #   | Transaction                      | Debit                                 | Credit                                | Amount | Entry Type                        |
-| :-- | :------------------------------- | :------------------------------------ | :------------------------------------ | :----- | :-------------------------------- |
-| 15  | Reclassify borrower payment      | Borrower Principal Repaid             | Borrower Interest Paid                | $5     | `ENTRY_INTEREST_RECLASSIFICATION` |
-| 16  | Reverse investor over-allocation | Investor Interest Payable             | Unallocated Borrower Interest Payable | $5     | `ENTRY_INTEREST_REVERSAL`         |
-| 17  | Allocate to servicer             | Unallocated Borrower Interest Payable | Servicer Fee Payable                  | $10    | `ENTRY_SERVICER_FEE_ALLOCATION`   |
-| 18  | Reclassify investor payout       | Investor Principal Paid               | Investor Interest Paid                | $5     | `ENTRY_INTEREST_RECLASSIFICATION` |
+| #   | Transaction                                | Debit                                 | Credit                                | Amount | Entry Type                        |
+| :-- | :----------------------------------------- | :------------------------------------ | :------------------------------------ | :----- | :-------------------------------- |
+| 15  | Reclassify borrower payment                | Borrower Principal Repaid             | Borrower Interest Paid                | $5     | `ENTRY_INTEREST_RECLASSIFICATION` |
+| 16  | Reverse investor over-allocation           | Investor Interest Payable             | Unallocated Borrower Interest Payable | $5     | `ENTRY_INTEREST_REVERSAL`         |
+| 17  | Allocate to servicer                       | Unallocated Borrower Interest Payable | Servicer Fee Payable                  | $10    | `ENTRY_SERVICER_FEE_ALLOCATION`   |
+| 18  | Reclassify investor payout                 | Investor Interest Paid                | Investor Principal Paid               | $5     | `ENTRY_INTEREST_RECLASSIFICATION` |
+| 19  | Write off uncollectible servicer claim     | Servicer Fee Payable                  | Servicer Adjustment                   | $10    | `ENTRY_ADJUSTMENT`                |
+| 20  | Recharacterize as servicer-funded interest | Servicer Adjustment                   | Investor Interest Payable             | $10    | `ENTRY_ADJUSTMENT`                |
 
 <details>
 <summary>Balance Sheet (After Correction - Sub-case 4C)</summary>
@@ -563,20 +575,20 @@ Accrual is correct. The error occurs during allocation.
 | ASSETS                          | Amount     | LIABILITIES & EQUITY                  | Amount     |
 | :------------------------------ | :--------- | :------------------------------------ | :--------- |
 | Cash                            | $0         | Investor Principal Payable            | $10,000    |
-| Borrower Principal Receivable   | $10,000    | Less: Investor Principal Paid         | ($510)     |
-| Less: Borrower Principal Repaid | ($500)     | **Net Investor Principal**            | **$9,490** |
-| **Net Principal Receivable**    | **$9,500** | Investor Interest Payable             | $90        |
-| Borrower Interest Receivable    | $110       | Less: Investor Interest Paid          | ($90)      |
+| Borrower Principal Receivable   | $10,000    | Less: Investor Principal Paid         | ($500)     |
+| Less: Borrower Principal Repaid | ($500)     | **Net Investor Principal**            | **$9,500** |
+| **Net Principal Receivable**    | **$9,500** | Investor Interest Payable             | $100       |
+| Borrower Interest Receivable    | $110       | Less: Investor Interest Paid          | ($100)     |
 | Less: Borrower Interest Paid    | ($110)     | **Net Investor Interest**             | **$0**     |
 | **Net Interest Receivable**     | **$0**     | Unallocated Borrower Interest Payable | $0         |
-|                                 |            | Servicer Fee Payable                  | $20        |
+|                                 |            | Servicer Fee Payable                  | $10        |
 |                                 |            | Less: Servicer Fee Paid               | ($10)      |
-|                                 |            | **Net Servicer Fees**                 | **$10**    |
+|                                 |            | **Net Servicer Fees**                 | **$0**     |
 | **Total Assets**                | **$9,500** | **Total Liabilities + Equity**        | **$9,500** |
 
 </details>
 
-> **Note:** Combination of sub-cases 4A and 4B. The $5 interest excess is reclassified, the $5 principal excess requires borrower-side correction. All three sub-cases produce the same final balance sheet.
+> **Note:** Combination of sub-cases 4A and 4B. All three sub-cases converge on the same final balance sheet: every net at $0, the investor's $10 excess recharacterized as servicer-funded interest, and the servicer's forgone $10 recorded as the loss in the entry log.
 
 ---
 
@@ -592,7 +604,8 @@ Accrual is correct. The error occurs during allocation.
 | `ENTRY_INVESTOR_INTEREST_ALLOCATION` | Allocating from Unallocated to investor                              |
 | `ENTRY_INVESTOR_INTEREST_WITHDRAWAL` | Distributing interest to investor via `investorWithdraw()`           |
 | `ENTRY_INTEREST_REVERSAL`            | Reversing incorrect interest accrual or investor interest allocation |
-| `ENTRY_INTEREST_RECLASSIFICATION`    | Reclassifying investor payout from interest to principal             |
+| `ENTRY_INTEREST_RECLASSIFICATION`    | Reclassifying paid amounts between interest and principal            |
+| `ENTRY_ADJUSTMENT`                   | Servicer-absorbed write-off (via `Servicer Adjustment`)              |
 | `ENTRY_BORROWER_REFUND`              | Refunding overpayment to borrower (Scenario 2B)                      |
 
 ### Credit Mechanism (Scenario 2 Option A)
@@ -606,3 +619,7 @@ After allocation: $20 + (-$10) = $10 net payment to servicer
 ```
 
 The servicer effectively "repays" the $10 overcharge by receiving $10 less on the next payment cycle.
+
+While either servicer fee bucket is negative, `servicerWithdraw` reverts with `ServicerOwesFunds`: a servicer owing the loan cannot take cash out until the credit is cured — by the next cycle's fee allocation (as above), by `returnFunds`, or by a manual `ENTRY_SERVICER_FEE_RECLASSIFICATION` entry between the two servicer paid accounts. The documented flow is unaffected because absorption happens at allocation time, before any withdrawal. If the loan reaches a terminal status while a credit is still open, write off the residual through `Servicer Adjustment` (as in the Scenario 4 corrections) so the loan does not end with a permanently frozen negative bucket.
+
+No equivalent credit exists for the investor: `createLedgerEntries` reverts with `InvestorNetNegative` if a batch would leave an investor net negative, because investor debt is uncollectible on-chain (no clawback). Scenario 4 shows the required write-off recipes.

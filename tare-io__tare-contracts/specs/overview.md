@@ -86,7 +86,7 @@ There are several security relevant decisions we made with the smart contracts
 
 ### Guardian & Admin Roles
 
-All contracts inherit `GuardianAccessControl` which provides a two-tier admin model:
+All contracts inherit `GuardianAccessControl` which provides a two-tier admin model (`LoansNFT` is the exception: it stores no roles of its own and resolves the same roles against the `Loans` contract at call time):
 
 - **Guardian** (`GUARDIAN_ROLE`): Held by a TimelockController. Controls critical operations (unpause, contract address updates, role grants/revocations, rescue functions) with a publicly visible delay. Self-administered — only guardians can grant/revoke other guardians. Self-renouncing roles is disabled (`renounceRole` always reverts) and the last remaining guardian cannot be revoked, so the contract can never be left without a guardian.
 - **Admin** (`ADMIN_ROLE`): Held by a multisig. Provides immediate operational control for time-sensitive actions (e.g., `pause`). Administered by guardian (granting/revoking admin requires timelock).
@@ -94,7 +94,7 @@ All contracts inherit `GuardianAccessControl` which provides a two-tier admin mo
 
 ### Pause / Unpause
 
-All contracts support pausing via OpenZeppelin `Pausable`. Admin, guardian, or a dedicated pauser (`PAUSER_ROLE`) can pause (immediate); only guardian can unpause (timelocked). When paused, all operational functions revert — only administrative functions remain available.
+All contracts support pausing via OpenZeppelin `Pausable`. Admin, guardian, or a dedicated pauser (`PAUSER_ROLE`) can pause (immediate); only guardian can unpause (timelocked). Each contract documents its pause scope: user-facing operations are blocked, while selected administrative and incident-recovery functions remain available. For example, `LoansNFT` keeps `mint`, `unlock`, and guardian-only `forceTransfer` callable while paused so Loans-governed issuance and recovery flows are not disabled.
 
 ### Role-Based Permissions
 
@@ -144,6 +144,8 @@ Rather than custom multisig logic, the system uses Safe smart accounts with two 
 - **TrustedSpender contract**: Allows delegates to transfer to pre-approved addresses
 
 This provides battle-tested security with operational flexibility. See [smart-accounts.md](./smart-accounts.md) for details.
+
+A third, standalone module — **CctpBridgeModule** — lets any single owner of a dedicated intake Safe bridge its USDC to one hardcoded recipient via Circle's CCTP. See [cctp-bridge-module.md](./cctp-bridge-module.md).
 
 ### Loan NFTs & Locking
 

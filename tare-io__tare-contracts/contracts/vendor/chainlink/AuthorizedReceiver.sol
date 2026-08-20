@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT
+// Vendored from smartcontractkit/chainlink-brownie-contracts tag 1.3.0
+// (contracts/src/v0.8/operatorforwarder/AuthorizedReceiver.sol).
+// Diff from upstream: fixed `pragma solidity 0.8.19` relaxed to `^0.8.19` so the
+// contract can compile in this repo's 0.8.33 compilation unit; import path
+// repointed to the vendored copy alongside this file. No logic changes.
+pragma solidity ^0.8.19;
+
+import {IAuthorizedReceiver} from "./IAuthorizedReceiver.sol";
+
+// solhint-disable gas-custom-errors
+abstract contract AuthorizedReceiver is IAuthorizedReceiver {
+  mapping(address sender => bool authorized) private s_authorizedSenders;
+  address[] private s_authorizedSenderList;
+
+  event AuthorizedSendersChanged(address[] senders, address changedBy);
+
+  // @notice Sets the fulfillment permission for a given node. Use `true` to allow, `false` to disallow.
+  // @param senders The addresses of the authorized Chainlink node
+  function setAuthorizedSenders(address[] calldata senders) external override validateAuthorizedSenderSetter {
+    require(senders.length > 0, "Must have at least 1 sender");
+    // Set previous authorized senders to false
+    uint256 authorizedSendersLength = s_authorizedSenderList.length;
+    for (uint256 i = 0; i < authorizedSendersLength; ++i) {
+      s_authorizedSenders[s_authorizedSenderList[i]] = false;
+    }
+    // Set new to true
+    for (uint256 i = 0; i < senders.length; ++i) {
+      require(s_authorizedSenders[senders[i]] == false, "Must not have duplicate senders");
+      s_authorizedSenders[senders[i]] = true;
+    }
+    // Replace list
+    s_authorizedSenderList = senders;
+    emit AuthorizedSendersChanged(senders, msg.sender);
+  }
+
+  // @notice Retrieve a list of authorized senders
+  // @return array of addresses
+  function getAuthorizedSenders() external view override returns (address[] memory) {
+    return s_authorizedSenderList;
+  }
+
+  // @notice Use this to check if a node is authorized for fulfilling requests
+  // @param sender The address of the Chainlink node
+  // @return The authorization status of the node
+  function isAuthorizedSender(address sender) public view override returns (bool) {
+    return s_authorizedSenders[sender];
+  }
+
+  // @notice customizable guard of who can update the authorized sender list
+  // @return bool whether sender can update authorized sender list
+  function _canSetAuthorizedSenders() internal virtual returns (bool);
+
+  // @notice validates the sender is an authorized sender
+  function _validateIsAuthorizedSender() internal view {
+    require(isAuthorizedSender(msg.sender), "Not authorized sender");
+  }
+
+  // @notice prevents non-authorized addresses from calling this method
+  modifier validateAuthorizedSender() {
+    _validateIsAuthorizedSender();
+    _;
+  }
+
+  // @notice prevents non-authorized addresses from calling this method
+  modifier validateAuthorizedSenderSetter() {
+    require(_canSetAuthorizedSenders(), "Cannot set authorized senders");
+    _;
+  }
+}

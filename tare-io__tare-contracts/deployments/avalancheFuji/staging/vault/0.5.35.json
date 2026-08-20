@@ -1,0 +1,15 @@
+{
+  "blockNumber": 57761105,
+  "chain": "avalancheFuji",
+  "chainId": 43113,
+  "commitHash": "76c8f1f",
+  "component": "vault",
+  "contracts": {
+    "NavCalculator": "0xf78c2930AEf6d86FCc10d1E713CC1eC6Ba7c5b57",
+    "PortfolioVault": "0x09Edd69E3ecDF253c44183607b6Bf5726336FbF7",
+    "VaultShareToken": "0x12f9ed3ed4c9Cc9b7106fe7d1D55E2d964987B9a"
+  },
+  "deploymentName": "staging",
+  "timestamp": 1786726938,
+  "version": "0.5.35"
+}

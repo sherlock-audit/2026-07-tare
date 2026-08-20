@@ -6,6 +6,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {ERC721Utils} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Utils.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {ILoansNFT, ILockable} from "contracts/interfaces/ILoansNFT.sol";
 import {IGuardianAccessControl} from "contracts/misc/interfaces/IGuardianAccessControl.sol";
@@ -14,14 +15,13 @@ import {IGuardianAccessControl} from "contracts/misc/interfaces/IGuardianAccessC
  * @title LoansNFT
  * @notice ERC721Enumerable loan NFT with ERC-5753-compatible locking.
  */
-contract LoansNFT is ILoansNFT, ERC721Enumerable {
+contract LoansNFT is ILoansNFT, ERC721Enumerable, Pausable {
   address public immutable LOANS_CONTRACT;
 
   /// @dev Cached from the Loans contract to avoid repeated external calls.
   bytes32 public immutable ADMIN_ROLE;
-
-  /// @dev Cached from the Loans contract to avoid repeated external calls.
   bytes32 public immutable GUARDIAN_ROLE;
+  bytes32 public immutable PAUSER_ROLE;
 
   string private _loansBaseURI;
   mapping(uint256 tokenId => address unlocker) private _unlockers;
@@ -38,6 +38,7 @@ contract LoansNFT is ILoansNFT, ERC721Enumerable {
     LOANS_CONTRACT = loansContract;
     ADMIN_ROLE = IGuardianAccessControl(loansContract).ADMIN_ROLE();
     GUARDIAN_ROLE = IGuardianAccessControl(loansContract).GUARDIAN_ROLE();
+    PAUSER_ROLE = IGuardianAccessControl(loansContract).PAUSER_ROLE();
     _loansBaseURI = baseURI;
     emit BaseURIUpdated(baseURI);
   }
@@ -55,6 +56,26 @@ contract LoansNFT is ILoansNFT, ERC721Enumerable {
 
     _loansBaseURI = newBaseURI;
     emit BaseURIUpdated(newBaseURI);
+  }
+
+  /// @inheritdoc ILoansNFT
+  function pause() external {
+    IGuardianAccessControl loansAccessControl = IGuardianAccessControl(LOANS_CONTRACT);
+    require(
+      loansAccessControl.hasRole(ADMIN_ROLE, msg.sender) ||
+        loansAccessControl.hasRole(GUARDIAN_ROLE, msg.sender) ||
+        loansAccessControl.hasRole(PAUSER_ROLE, msg.sender),
+      Unauthorized()
+    );
+
+    _pause();
+  }
+
+  /// @inheritdoc ILoansNFT
+  function unpause() external {
+    require(IGuardianAccessControl(LOANS_CONTRACT).hasRole(GUARDIAN_ROLE, msg.sender), Unauthorized());
+
+    _unpause();
   }
 
   /// @inheritdoc ILoansNFT
@@ -83,7 +104,7 @@ contract LoansNFT is ILoansNFT, ERC721Enumerable {
    *      lock. This lets integrators such as `LoansExchange` lock listed loans with
    *      narrow per-token approvals instead of requiring `setApprovalForAll`.
    */
-  function lock(address unlocker, uint256 id) external {
+  function lock(address unlocker, uint256 id) external whenNotPaused {
     address tokenOwner = ownerOf(id);
 
     require(unlocker != address(0), InvalidUnlocker());
@@ -119,8 +140,22 @@ contract LoansNFT is ILoansNFT, ERC721Enumerable {
     unlocker = _unlockers[tokenId];
   }
 
+  /**
+   * @inheritdoc ERC721
+   * @dev Also covers both `safeTransferFrom` variants, which funnel through it.
+   *      `forceTransfer` calls `_update` directly and so stays live while paused.
+   */
+  function transferFrom(address from, address to, uint256 tokenId) public override(ERC721, IERC721) whenNotPaused {
+    super.transferFrom(from, to, tokenId);
+  }
+
   /// @inheritdoc ERC721
-  function approve(address to, uint256 tokenId) public override(ERC721, IERC721) {
+  function setApprovalForAll(address operator, bool approved) public override(ERC721, IERC721) whenNotPaused {
+    super.setApprovalForAll(operator, approved);
+  }
+
+  /// @inheritdoc ERC721
+  function approve(address to, uint256 tokenId) public override(ERC721, IERC721) whenNotPaused {
     require(_unlockers[tokenId] == address(0), TokenLocked());
     super.approve(to, tokenId);
   }
