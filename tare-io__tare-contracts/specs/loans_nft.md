@@ -69,7 +69,7 @@ Admin, guardian, or pauser can `pause` (immediate); only guardian can `unpause` 
 **Functions blocked when paused** (`whenNotPaused`, revert `EnforcedPause()`):
 
 - `transferFrom` / both `safeTransferFrom` variants — no ownership changes during an incident, including by previously-approved operators or unlockers
-- `approve`, `setApprovalForAll` — no new transfer authority can be granted
+- `approve`, `setApprovalForAll` — only when *granting* (`approve` with a non-zero address, `setApprovalForAll(…, true)`); no new transfer authority can be granted. Revocations (`approve(address(0), …)`, `setApprovalForAll(…, false)`) stay live so owners can strip compromised operators during an incident
 - `lock` — no new locks (a hostile lock makes the token unrecoverable until the unlocker cooperates)
 
 **Functions NOT paused** (recovery paths must stay available during incidents):
@@ -115,4 +115,4 @@ Errors (in addition to standard ERC721 errors):
 | `forceTransfer` receiver check   | Invokes `onERC721Received` on contract recipients                       | Consistent with the `Rescuable` safe-transfer rescue path; guarantees `to` can handle and further move the NFT |
 | `forceTransfer` ownership nonces | Bumped via the standard `_update` override                              | Keeps downstream observers (notably `PortfolioVault`) consistent regardless of how the transfer happened       |
 | Pause state                      | Own OZ `Pausable` state, auth delegated to `Loans` roles                | Independent per-contract pause matching the rest of the protocol, without duplicating role storage             |
-| Pause scope                      | Transfers, approvals, and `lock` gated; `unlock` / `forceTransfer` live | Halts ownership changes and hostile locks during incidents while keeping guardian recovery paths operational   |
+| Pause scope                      | Transfers, approval grants, and `lock` gated; approval revocations, `unlock`, and `forceTransfer` live | Halts ownership changes and hostile locks during incidents while keeping recovery and de-risking paths operational |

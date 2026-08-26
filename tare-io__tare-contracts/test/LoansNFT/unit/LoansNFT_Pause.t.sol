@@ -191,6 +191,32 @@ contract LoansNFT_PauseTest is LoansTestBase {
     assertEq(loansNFT.ownerOf(uint256(newId)), investor);
   }
 
+  function test_Approve_RevokeWorks_WhenPaused() public {
+    vm.prank(investor);
+    loansNFT.approve(recipient, uint256(id));
+
+    vm.prank(guardian);
+    loansNFT.pause();
+
+    vm.prank(investor);
+    loansNFT.approve(address(0), uint256(id));
+
+    assertEq(loansNFT.getApproved(uint256(id)), address(0));
+  }
+
+  function test_SetApprovalForAll_RevokeWorks_WhenPaused() public {
+    vm.prank(investor);
+    loansNFT.setApprovalForAll(recipient, true);
+
+    vm.prank(guardian);
+    loansNFT.pause();
+
+    vm.prank(investor);
+    loansNFT.setApprovalForAll(recipient, false);
+
+    assertFalse(loansNFT.isApprovedForAll(investor, recipient));
+  }
+
   // ============ resume after unpause ============
 
   function test_TransferFrom_Works_AfterUnpause() public {

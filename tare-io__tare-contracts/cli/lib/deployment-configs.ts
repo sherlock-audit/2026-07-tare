@@ -97,6 +97,16 @@ export const deploymentConfigs: Record<string, DeploymentConfig> = {
     guardian: "0xaF73A34d9aec79C808fF1A57372c3e9838F63Ab8",
     loansBaseURI: "https://api.tare.live/loans/nft-metadata/",
   },
+  // Base-side custody for the avalanche-pre-production environment (cctp-bridge only).
+  "base-pre-production": {
+    deploymentId: 100208453,
+    shortName: "pre-production",
+    chain: "base",
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    admin: "", // Replace if needed
+    guardian: "", // Replace if needed
+    loansBaseURI: "https://api.tare.live/loans/nft-metadata/",
+  },
   "fuji-dev": {
     deploymentId: 100043113,
     shortName: "dev",

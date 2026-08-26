@@ -211,19 +211,21 @@ cast balance $DEPLOYER_ADDR --rpc-url $AVALANCHE_RPC --ether
 # Expect at least ~5 AVAX for deployer; top up if not.
 ```
 
+🔶 Start from a clean roles manifest. `manifest set` merges field-by-field
+into any existing `roles/latest.json`, so a manifest left over from a previous
+deployment silently carries its fields (role SAs, `salt`, retired fields) into
+this one — and §5 `create-role-accounts` would then _skip_ creating the SAs it
+finds already recorded. Delete any leftover file (its version-pinned copy
+remains in git as the durable record) and confirm the CLI sees none:
+
+```bash
+git rm --ignore-unmatch deployments/avalanche/production/roles/latest.json
+pnpm tare-contracts manifest show   # must report no manifest
+```
+
 🔶 Record each Safe address (created in the Safe UI, §1.1) into the roles
 manifest — `manifest set` checksums the address and verifies it has code
 on chain:
-
-> **Redeployment? Start from a clean manifest.** `manifest set` merges
-> field-by-field into the existing `roles/latest.json`, so a manifest left
-> over from a previous deployment silently carries its fields (role SAs,
-> `salt`, retired fields) into the new one — and §5 `create-role-accounts`
-> would then _skip_ creating the SAs it finds already recorded. Before the
-> first `manifest set`, delete the old `latest.json`
-> (`git rm deployments/avalanche/production/roles/latest.json`; the old
-> version-pinned copy remains in git as the durable record) and confirm
-> `pnpm tare-contracts manifest show` reports no manifest.
 
 ```bash
 pnpm tare-contracts manifest set adminSafe 0x...

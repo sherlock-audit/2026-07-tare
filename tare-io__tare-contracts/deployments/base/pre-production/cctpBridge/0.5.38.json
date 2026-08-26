@@ -1,0 +1,13 @@
+{
+  "blockNumber": 50258192,
+  "chain": "base",
+  "chainId": 8453,
+  "commitHash": "e5e1f06",
+  "component": "cctpBridge",
+  "contracts": {
+    "CctpBridgeModule": "0x050F133bCee783178E172F7Fe48dAf328f90f89c"
+  },
+  "deploymentName": "pre-production",
+  "timestamp": 1787305731,
+  "version": "0.5.38"
+}

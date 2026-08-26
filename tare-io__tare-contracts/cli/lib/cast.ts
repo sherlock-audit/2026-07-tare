@@ -53,6 +53,9 @@ export function resolveDeployment(cmd: Command): ResolvedDeployment {
   const rpcUrl = chainConfig.rpc()
   if (!rpcUrl) throw new Error(`RPC URL not set for chain: ${config.chain}`)
 
+  // stderr so a stale TARE_CHAIN/TARE_DEPLOYMENT_NAME is caught by eye without polluting --json stdout
+  console.error(`▶ deployment: ${config.chain}/${config.shortName}`)
+
   // Decrypt keystore once — key stays in Node process memory, prompted only once
   const resolvedKey = privateKey ?? (account ? decryptKeystore(account) : undefined)
 
