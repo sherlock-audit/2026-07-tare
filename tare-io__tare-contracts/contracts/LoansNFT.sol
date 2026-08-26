@@ -149,13 +149,23 @@ contract LoansNFT is ILoansNFT, ERC721Enumerable, Pausable {
     super.transferFrom(from, to, tokenId);
   }
 
-  /// @inheritdoc ERC721
-  function setApprovalForAll(address operator, bool approved) public override(ERC721, IERC721) whenNotPaused {
+  /**
+   * @inheritdoc ERC721
+   * @dev While paused, granting an operator reverts but revoking stays live so
+   *      owners can strip compromised operators during an incident.
+   */
+  function setApprovalForAll(address operator, bool approved) public override(ERC721, IERC721) {
+    if (approved) _requireNotPaused();
     super.setApprovalForAll(operator, approved);
   }
 
-  /// @inheritdoc ERC721
-  function approve(address to, uint256 tokenId) public override(ERC721, IERC721) whenNotPaused {
+  /**
+   * @inheritdoc ERC721
+   * @dev While paused, granting an approval reverts but revoking (`to == address(0)`)
+   *      stays live so owners can strip compromised approvals during an incident.
+   */
+  function approve(address to, uint256 tokenId) public override(ERC721, IERC721) {
+    if (to != address(0)) _requireNotPaused();
     require(_unlockers[tokenId] == address(0), TokenLocked());
     super.approve(to, tokenId);
   }
